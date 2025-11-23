@@ -54,7 +54,7 @@ WiFiServer server(80);
 // LOG EN SPIFFS (HASTA ~1 MES)
 // =============================
 const char* LOG_FILE = "/historial.csv";
-const unsigned long MAX_LOG_LINES = 43200UL; // 60 * 24 * 30  (1 por minuto, 30 días aprox)
+const unsigned long MAX_LOG_LINES = 8640UL; // 24 × 60 / 5 * 30 (1 por 5 minuto, en 30 días aprox)
 bool spiffsOk = false;
 unsigned long logLines = 0;
 
@@ -149,6 +149,7 @@ bool leerDHT() {
 
   // === CORRECCIÓN DE HUMEDAD ======================
   HUMEDAD = HUMEDAD - 9.0;  
+  TEMPERATURA = TEMPERATURA - 0.8;
 
   // Limitar valores
   if (HUMEDAD < 0) HUMEDAD = 0;
@@ -234,7 +235,7 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
 void actualizarHistorial() {
   unsigned long ahora = millis();
 
-  if (ahora - lastHistSample >= 60000) {   // 1 minuto
+  if (ahora - lastHistSample >= 300000) {   // 1 minuto
     lastHistSample = ahora;
 
     histTemp[histIndex] = TEMPERATURA;
@@ -727,22 +728,6 @@ void loop() {
         color: #EEE;
     }
 
-    /* Botón CSV */
-    #btnCSV{
-      margin:20px auto;
-      display:block;
-      padding:10px 22px;
-      background:#27293d;
-      color:#fff;
-      border:1px solid #444;
-      border-radius:8px;
-      font-size:16px;
-      cursor:pointer;
-      box-shadow:0 0 8px rgba(0,0,0,0.4);
-    }
-    #btnCSV:hover{
-      background:#343754;
-    }
 
   </style>
 </head>
@@ -757,22 +742,31 @@ void loop() {
             position: absolute;
             top: 25px;
             right: 40px;
-            width: 52px;
-            height: 52px;
+            width: 58px;
+            height: 58px;
             border-radius: 50%;
-            background: #2a2d3d;
-            color: #fff;
-            border: 1px solid #444;
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.18);
             cursor: pointer;
             font-size: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 8px rgba(0,0,0,0.45);
-            z-index: 20;
-        ">
-    CSV
+            color: #e5e5e5;
+            box-shadow:
+                0 4px 14px rgba(0,0,0,0.45),
+                inset 0 0 12px rgba(255,255,255,0.08);
+            transition: 0.25s ease;
+            z-index: 30;
+        "
+        onmouseover="this.style.transform='scale(1.12)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.55), inset 0 0 16px rgba(255,255,255,0.12)'"
+        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 14px rgba(0,0,0,0.45), inset 0 0 12px rgba(255,255,255,0.08)'">
+
+    .CSV
 </button>
+
 
 
 
