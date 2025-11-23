@@ -38,6 +38,10 @@ int   histCount      = 0;  // cantidad de muestras válidas
 int   histIndex      = 0;  // índice circular
 unsigned long lastHistSample = 0; // para sampleo cada 60s
 
+unsigned long lastHistMinute = 0;   // para el gráfico (1 minuto)
+unsigned long lastCsvSave    = 0;   // para el archivo CSV (5 minutos)
+
+
 // =============================
 // TELEGRAM CONFIG
 // =============================
@@ -235,21 +239,26 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
 void actualizarHistorial() {
   unsigned long ahora = millis();
 
-  if (ahora - lastHistSample >= 300000) {   // 1 minuto
-    lastHistSample = ahora;
+  // === ACTUALIZAR HISTORIAL EN RAM (GRÁFICO 1 HORA) CADA 1 MINUTO ===
+  if (ahora - lastHistMinute >= 60000) {
+    lastHistMinute = ahora;
 
     histTemp[histIndex] = TEMPERATURA;
     histHum[histIndex]  = HUMEDAD;
 
-    // Guardar en log con fecha real
-    String fecha = obtenerFechaHora();
-    agregarRegistroLog(fecha, TEMPERATURA, HUMEDAD);
-
     histIndex = (histIndex + 1) % HOUR_POINTS;
-
     if (histCount < HOUR_POINTS) histCount++;
   }
+
+  // === GUARDAR EN ARCHIVO CSV CADA 5 MINUTOS ===
+  if (ahora - lastCsvSave >= 300000) {
+    lastCsvSave = ahora;
+
+    String fecha = obtenerFechaHora();
+    agregarRegistroLog(fecha, TEMPERATURA, HUMEDAD);
+  }
 }
+
 
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
