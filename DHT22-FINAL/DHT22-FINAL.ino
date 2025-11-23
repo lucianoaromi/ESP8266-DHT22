@@ -852,7 +852,7 @@ void loop() {
         style="font-size:30px; color:#8E2E2E;">
         delete
     </span>
-    <span style="font-size:9px; color:#B4B4B4;">CLEAR</span>
+    <span style="font-size:9px; color:#E76C6C;">CLEAR</span>
 </button>
 
 
@@ -884,7 +884,7 @@ void loop() {
         table
     </span>
 
-    <span style="font-size:9px; color:#C9FFC9;">.CSV</span>
+    <span style="font-size:9px; color:#59D08A;">.CSV</span>
 </button>
 
 
