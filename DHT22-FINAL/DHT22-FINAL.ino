@@ -849,10 +849,10 @@ void loop() {
     onmouseout="this.style.transform='scale(1)'"
 >
     <span class="material-symbols-rounded"
-        style="font-size:30px; color:#8E2E2E;">
+        style="font-size:30px; color:#7A2626;">
         delete
     </span>
-    <span style="font-size:9px; color:#E76C6C;">CLEAR</span>
+    <span style="font-size:9px; color:#D45A5A;">CLEAR</span>
 </button>
 
 
@@ -880,11 +880,11 @@ void loop() {
     onmouseout="this.style.transform='scale(1)'"
 >
     <span class="material-symbols-rounded"
-        style="font-size:30px; color:#084A22;">
+        style="font-size:30px; color:#0A3F1E;">
         table
     </span>
 
-    <span style="font-size:9px; color:#59D08A;">.CSV</span>
+    <span style="font-size:9px; color:#47B676;">.CSV</span>
 </button>
 
 
