@@ -751,30 +751,41 @@ void loop() {
             position: absolute;
             top: 25px;
             right: 40px;
-            width: 58px;
-            height: 58px;
-            border-radius: 50%;
+            width: 75px;
+            height: 75px;
+            border-radius: 50%;              /* ← REDONDO */
             background: rgba(255,255,255,0.06);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(8px);
             border: 1px solid rgba(255,255,255,0.18);
             cursor: pointer;
-            font-size: 15px;
             display: flex;
+            flex-direction: column;          /* ← ICONO ARRIBA, TEXTO ABAJO */
             align-items: center;
             justify-content: center;
-            color: #e5e5e5;
+            gap: 2px;
             box-shadow:
                 0 4px 14px rgba(0,0,0,0.45),
                 inset 0 0 12px rgba(255,255,255,0.08);
             transition: 0.25s ease;
             z-index: 30;
         "
-        onmouseover="this.style.transform='scale(1.12)'; this.style.boxShadow='0 6px 20px rgba(0,0,0,0.55), inset 0 0 16px rgba(255,255,255,0.12)'"
-        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 14px rgba(0,0,0,0.45), inset 0 0 12px rgba(255,255,255,0.08)'">
+        onmouseover="this.style.transform='scale(1.12)'"
+        onmouseout="this.style.transform='scale(1)'"
+    >
 
-    .CSV
+    <!-- ICONO -->
+    <span class="material-symbols-rounded" style="font-size:32px; color:#4CAF50;">
+        table
+    </span>
+
+    <!-- TEXTO -->
+    <span style="font-size:10px; color:#e5e5e5;">
+        .CSV
+    </span>
+
 </button>
+
+
 
 
 
