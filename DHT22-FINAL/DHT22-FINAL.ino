@@ -826,66 +826,67 @@ void loop() {
 ">
 
     <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
-    <button id="btnClear"
-        style="
-            width:57px;
-            height:57px;
-            border-radius:50%;
-            background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
-            backdrop-filter: blur(6px);
-            border:1px solid rgba(120,0,0,0.55);
-            cursor:pointer;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            gap:2px;
-            box-shadow:
-                0 4px 14px rgba(0,0,0,0.50),
-                inset 0 0 10px rgba(180,0,0,0.25);
-            transition:0.25s ease;
-        "
-        onmouseover="this.style.transform='scale(1.12)'"
-        onmouseout="this.style.transform='scale(1)'"
-    >
-        <span class="material-symbols-rounded"
-            style="font-size:30px; color:#A53737;">
-            delete
-        </span>
-        <span style="font-size:9px; color:#f8dada;">CLEAR</span>
-    </button>
+<button id="btnClear"
+    style="
+        width:57px;
+        height:57px;
+        border-radius:50%;
+        background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
+        backdrop-filter: blur(6px);
+        border:1px solid rgba(120,0,0,0.55);
+        cursor:pointer;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:2px;
+        box-shadow:
+            0 4px 14px rgba(0,0,0,0.50),
+            inset 0 0 10px rgba(180,0,0,0.25);
+        transition:0.25s ease;
+    "
+    onmouseover="this.style.transform='scale(1.12)'"
+    onmouseout="this.style.transform='scale(1)'"
+>
+    <span class="material-symbols-rounded"
+        style="font-size:30px; color:#8E2E2E;">
+        delete
+    </span>
+    <span style="font-size:9px; color:#B4B4B4;">CLEAR</span>
+</button>
 
 
-    <!-- ========== BOTÓN CSV (VERDE) ========== -->
-    <button id="btnCSV"
-        style="
-            width:57px;
-            height:57px;
-            border-radius:50%;
-            background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
-            backdrop-filter: blur(6px);
-            border:1px solid rgba(0,100,0,0.55);
-            cursor:pointer;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            gap:2px;
-            box-shadow:
-                0 4px 14px rgba(0,0,0,0.50),
-                inset 0 0 10px rgba(0,160,0,0.25);
-            transition:0.25s ease;
-        "
-        onmouseover="this.style.transform='scale(1.12)'"
-        onmouseout="this.style.transform='scale(1)'"
-    >
-        <span class="material-symbols-rounded"
-            style="font-size:30px; color:#0A5C2A;">
-            table
-        </span>
+<!-- ========== BOTÓN CSV (VERDE) ========== -->
+<button id="btnCSV"
+    style="
+        width:57px;
+        height:57px;
+        border-radius:50%;
+        background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
+        backdrop-filter: blur(6px);
+        border:1px solid rgba(0,100,0,0.55);
+        cursor:pointer;
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:2px;
+        box-shadow:
+            0 4px 14px rgba(0,0,0,0.50),
+            inset 0 0 10px rgba(0,160,0,0.25);
+        transition:0.25s ease;
+    "
+    onmouseover="this.style.transform='scale(1.12)'"
+    onmouseout="this.style.transform='scale(1)'"
+>
+    <span class="material-symbols-rounded"
+        style="font-size:30px; color:#084A22;">
+        table
+    </span>
 
-        <span style="font-size:9px; color:#dfffe0;">.CSV</span>
-    </button>
+    <span style="font-size:9px; color:#C9FFC9;">.CSV</span>
+</button>
+
 
 </div>
 
