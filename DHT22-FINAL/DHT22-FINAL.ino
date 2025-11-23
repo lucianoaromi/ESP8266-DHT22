@@ -1,0 +1,1009 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiClientSecure.h>
+#include <DHT.h>
+#include <time.h>
+
+// =============================
+// CONFIG WIFI
+// =============================
+const char* ssid     = "Yolanda Casa";
+const char* password = "Dr4Y0l4nd4G0nz4l3z";
+
+// =============================
+// CONFIG DHT22
+// =============================
+#define SENSOR D5
+#define DHTTYPE DHT22
+DHT dht(SENSOR, DHTTYPE);
+
+// Variables globales
+float TEMPERATURA = 0;
+float HUMEDAD = 0;
+
+float tempMax = -100, tempMin = 200;
+float humMax  = 0,    humMin  = 100;
+
+unsigned long lastRead        = 0;
+unsigned long lastClientCheck = 0;
+
+// =============================
+// HISTORIAL 1 HORA (60 puntos)
+// =============================
+const int HOUR_POINTS = 60;
+float histTemp[HOUR_POINTS];
+float histHum[HOUR_POINTS];
+int   histCount      = 0;  // cantidad de muestras válidas
+int   histIndex      = 0;  // índice circular
+unsigned long lastHistSample = 0; // para sampleo cada 60s
+
+// =============================
+// TELEGRAM CONFIG
+// =============================
+const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
+const String CHAT_ID        = "5144677839";
+
+const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
+unsigned long lastAlert = 0;                 // tiempo del último aviso
+const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
+
+WiFiServer server(80);
+
+// =============================
+// HORA NTP (ARGENTINA GMT-3)
+// =============================
+String obtenerFechaHora() {
+  time_t now = time(nullptr);
+  struct tm* timeinfo = localtime(&now);
+  if (!timeinfo) return "Sin hora";
+
+  char buffer[32];
+  sprintf(buffer, "%02d/%02d/%04d %02d:%02d:%02d",
+          timeinfo->tm_mday,
+          timeinfo->tm_mon + 1,
+          timeinfo->tm_year + 1900,
+          timeinfo->tm_hour,
+          timeinfo->tm_min,
+          timeinfo->tm_sec);
+  return String(buffer);
+}
+
+// =============================
+// ENCODER URL PARA TELEGRAM
+// =============================
+String urlEncode(const String &text) {
+  String encoded = "";
+  char c;
+  char buf[4];
+  for (int i = 0; i < text.length(); i++) {
+    c = text.charAt(i);
+    if ( ('a' <= c && c <= 'z') ||
+         ('A' <= c && c <= 'Z') ||
+         ('0' <= c && c <= '9') ) {
+      encoded += c;
+    } else {
+      sprintf(buf, "%%%02X", (unsigned char)c);
+      encoded += buf;
+    }
+  }
+  return encoded;
+}
+
+// =============================
+// ENVIAR MENSAJE TELEGRAM
+// =============================
+void enviarTelegram(String mensaje) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  if (!client.connect("api.telegram.org", 443)) {
+    Serial.println("❌ Error conectando a Telegram");
+    return;
+  }
+
+  String m = urlEncode(mensaje);
+
+  String url = "/bot" + TELEGRAM_TOKEN +
+               "/sendMessage?chat_id=" + CHAT_ID +
+               "&text=" + m;
+
+  client.print(String("GET ") + url +
+               " HTTP/1.1\r\nHost: api.telegram.org\r\nConnection: close\r\n\r\n");
+
+  Serial.println("📨 Telegram enviado: " + mensaje);
+}
+
+// =============================
+// LECTURA DEL DHT22
+// =============================
+
+bool leerDHT() {
+  float sumaT = 0, sumaH = 0;
+  int muestras = 5, validas = 0;
+
+  for (int i = 0; i < muestras; i++) {
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+
+    if (!isnan(t) && !isnan(h)) {
+      sumaT += t;
+      sumaH += h;
+      validas++;
+    }
+    delay(10);
+  }
+
+  if (validas == 0) return false;
+
+  TEMPERATURA = sumaT / validas;
+  HUMEDAD     = sumaH / validas;
+
+  // === CORRECCIÓN DE HUMEDAD ======================
+  // Ajustá este valor según la diferencia real (+/-)
+  HUMEDAD = HUMEDAD - 9.0;  
+
+  // Limitar valores
+  if (HUMEDAD < 0) HUMEDAD = 0;
+  if (HUMEDAD > 100) HUMEDAD = 100;
+
+  if (TEMPERATURA > tempMax) tempMax = TEMPERATURA;
+  if (TEMPERATURA < tempMin) tempMin = TEMPERATURA;
+
+  if (HUMEDAD > humMax) humMax = HUMEDAD;
+  if (HUMEDAD < humMin) humMin = HUMEDAD;
+
+  return true;
+}
+
+
+// =============================
+// GUARDAR MUESTRA EN HISTORIAL (cada minuto)
+// =============================
+void actualizarHistorial() {
+  unsigned long ahora = millis();
+
+  // 10 segundos (antes era 60000 ms)
+  if (ahora - lastHistSample >= 60000) {
+    lastHistSample = ahora;
+
+    histTemp[histIndex] = TEMPERATURA;
+    histHum[histIndex]  = HUMEDAD;
+
+    histIndex = (histIndex + 1) % HOUR_POINTS;
+
+    if (histCount < HOUR_POINTS) histCount++;
+  }
+}
+
+
+// ==========================================================
+//                    CÁLCULO DE FASE LUNAR
+// ==========================================================
+
+// ---- Edad lunar (días desde la última luna nueva) ----
+double edadLunar() {
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+
+  int d = t->tm_mday;
+  int m = t->tm_mon + 1;
+  int y = t->tm_year + 1900;
+
+  if (m < 3) {
+    y--;
+    m += 12;
+  }
+
+  long a = y / 100;
+  long b = a / 4;
+  long c = 2 - a + b;
+  long e = (long)(365.25 * (y + 4716));
+  long f = (long)(30.6001 * (m + 1));
+
+  long jd = c + d + e + f - 1524.5;
+  double daysSinceNew = jd - 2451549.5;
+
+  double age = fmod(daysSinceNew, 29.53058867);
+  if (age < 0) age += 29.53058867;
+
+  return age;
+}
+
+
+// ---- Fecha futura sumando días ----
+String fechaFutura(double dias) {
+  time_t now = time(nullptr);
+  now += (long)(dias * 86400);
+
+  struct tm* t = localtime(&now);
+
+  char buf[20];
+  sprintf(buf, "%02d/%02d/%04d", t->tm_mday, t->tm_mon + 1, t->tm_year + 1900);
+
+  return String(buf);
+}
+
+
+// ---- Próximas luna nueva y luna llena ----
+void calcularLunas(String &proximaNueva, String &proximaLlena) {
+  double edad = edadLunar();
+  double ciclo = 29.53058867;
+
+  double dn = ciclo - edad;      // Días hasta próxima luna nueva
+  double dl = 14.765 - edad;     // Días hasta luna llena
+
+  if (dl < 0) dl += ciclo;
+
+  proximaNueva = fechaFutura(dn);
+  proximaLlena = fechaFutura(dl);
+}
+
+
+// ---- Fase lunar en 0–7 ----
+int faseLunar() {
+  double age = edadLunar();
+  double frac = age / 29.53058867;
+
+  if (frac < 0.0625) return 0;  
+  if (frac < 0.1875) return 1;  
+  if (frac < 0.3125) return 2;  
+  if (frac < 0.4375) return 3;  
+  if (frac < 0.5625) return 4;  
+  if (frac < 0.6875) return 5;  
+  if (frac < 0.8125) return 6;  
+  if (frac < 0.9375) return 7;  
+  return 0;
+}
+
+
+// ---- Nombre de fase (hemisferio sur) ----
+String faseNombre(int f) {
+  switch(f) {
+    case 0: return "Luna nueva";
+    case 1: return "Creciente cóncava";
+    case 2: return "Cuarto creciente";
+    case 3: return "Gibosa creciente";
+    case 4: return "Luna llena";
+    case 5: return "Gibosa menguante";
+    case 6: return "Cuarto menguante";
+    case 7: return "Menguante cóncava";
+  }
+  return "Desconocida";
+}
+
+
+// ---- Iconos lunares (hemisferio sur) ----
+String faseIcono(int f) {
+  switch(f) {
+    case 0: return "🌑";
+    case 1: return "🌘";
+    case 2: return "🌗";
+    case 3: return "🌖";
+    case 4: return "🌕";
+    case 5: return "🌔";
+    case 6: return "🌓";
+    case 7: return "🌒";
+  }
+  return "🌑";
+}
+
+
+
+// =============================
+// SETUP
+// =============================
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  // Conexión WiFi
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando a WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" conectado!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+
+  // NTP GMT-3 (Argentina)
+  configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+
+  // Inicializar historial
+  for (int i = 0; i < HOUR_POINTS; i++) {
+    histTemp[i] = NAN;
+    histHum[i]  = NAN;
+  }
+  lastHistSample = millis();
+
+  server.begin();
+
+  // Mensaje inicial a Telegram
+  enviarTelegram("🤖 Sistema iniciado. IP: " + WiFi.localIP().toString());
+}
+
+// =============================
+// LOOP PRINCIPAL
+// =============================
+void loop() {
+  unsigned long ahora = millis();
+
+  // Leer cada 5 segundos
+  if (ahora - lastRead > 5000) {
+    lastRead = ahora;
+
+    if (leerDHT()) {
+      Serial.printf("Temp: %.1f C | Hum: %.1f %%\n", TEMPERATURA, HUMEDAD);
+
+      // Actualizar historial de 1 hora
+      actualizarHistorial();
+
+      // Alerta por temperatura
+      if (TEMPERATURA >= ALERTA_TEMP &&
+          (lastAlert == 0 || (ahora - lastAlert > ALERT_INTERVAL))) {
+        lastAlert = ahora;
+        String alerta = "ALERTA: Temperatura alta!\n";
+        alerta += "🌡 Temp: " + String(TEMPERATURA) + " °C\n";
+        alerta += "💧 Hum: " + String(HUMEDAD) + " %\n";
+        alerta += "🕒 " + obtenerFechaHora();
+        enviarTelegram(alerta);
+      }
+    }
+  }
+
+  // =============================
+  // SERVIDOR WEB CON PÁGINA HTML
+  // =============================
+  WiFiClient client = server.available();
+  if (!client) return;
+
+  unsigned long timeout = millis();
+  while (!client.available()) {
+    if (millis() - timeout > 500) {
+      client.stop();
+      return;
+    }
+  }
+
+  String requestLine = client.readStringUntil('\r');
+  client.read(); // consumir '\n'
+
+  while (client.available()) {
+    String header = client.readStringUntil('\r');
+    client.read();
+    if (header.length() == 1) break;
+  }
+
+  // Endpoint JSON /data
+// Endpoint JSON /data
+if (requestLine.indexOf("GET /data") >= 0) {
+  String fechaHora = obtenerFechaHora();
+
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.println();
+
+  client.print("{\"temp\":");
+  client.print(TEMPERATURA, 1);
+  client.print(",\"hum\":");
+  client.print(HUMEDAD, 1);
+  client.print(",\"tmin\":");
+  client.print(tempMin, 1);
+  client.print(",\"tmax\":");
+  client.print(tempMax, 1);
+  client.print(",\"hmin\":");
+  client.print(humMin, 1);
+  client.print(",\"hmax\":");
+  client.print(humMax, 1);
+  client.print(",\"time\":\"");
+  client.print(fechaHora);
+  client.print("\",\"hcount\":");
+  client.print(histCount);
+
+// === FASE LUNAR ===
+int f = faseLunar();
+
+client.print(",\"moonIcon\":\"");
+client.print(faseIcono(f));
+
+client.print("\",\"moonName\":\"");
+client.print(faseNombre(f));
+
+String lunaNueva, lunaLlena;
+calcularLunas(lunaNueva, lunaLlena);
+
+// nombres correctos del JSON
+client.print("\",\"nextNewMoon\":\"");
+client.print(lunaNueva);
+
+client.print("\",\"nextFullMoon\":\"");
+client.print(lunaLlena);
+client.print("\"");
+
+
+  client.print(",\"histT\":[");
+  for (int i = 0; i < histCount; i++) {
+    int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
+    if (i > 0) client.print(",");
+    client.print(histTemp[idx], 1);
+  }
+
+  client.print("],\"histH\":[");
+  for (int i = 0; i < histCount; i++) {
+    int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
+    if (i > 0) client.print(",");
+    client.print(histHum[idx], 1);
+  }
+  client.println("]}");
+
+  client.stop();
+  return;
+}
+
+
+  // Página principal (HTML)
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println("Connection: close");
+  client.println();
+
+  client.println(R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Monitor Ambiental ESP8266/DHT22</title>
+
+  <!-- GOOGLE MATERIAL ICONS -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body{
+      background:#0d0f1a;
+      color:#e0e0e0;
+      font-family:Segoe UI, sans-serif;
+      text-align:center;
+      padding:25px;
+    }
+    h1{margin-bottom:5px;}
+    h2{margin-top:0;color:#aaa;}
+
+    .panel{
+      margin:20px auto;
+      display:inline-block;
+      text-align:left;
+      padding:25px 35px;
+      border-radius:16px;
+      background:#1b1d2b;
+      box-shadow:0 0 18px rgba(0,0,0,0.7);
+      min-width:300px;
+    }
+
+    .section-title{
+      font-size:20px;
+      margin-bottom:10px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-weight:bold;
+    }
+
+    .icon{
+      font-family: 'Material Symbols Rounded';
+      font-size:28px;
+      vertical-align:middle;
+    }
+
+    /* COLORES NUMÉRICOS */
+    #temp{ color:#FFD700; }
+    #hum{  color:#00B4FF; }
+
+    /* Íconos coloreados */
+    .icon-temp { color:#FFC107; }
+    .icon-hum  { color:#03A9F4; }
+    .icon-time { color:#4CAF50; }
+
+    .label{margin:8px 0;font-size:17px;}
+    .value{font-size:19px;font-weight:bold;}
+
+    .charts{
+      max-width:1000px;
+      margin:20px auto;
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:space-around;
+      gap:20px;
+    }
+
+    canvas{
+      background:#141622;
+      border-radius:10px;
+      padding:12px;
+    }
+
+    .footer{
+      margin-top:25px;
+      font-size:16px;
+      font-family:Georgia, serif;
+      color:#DAA5;                           /* Amarillo suave */
+      font-style:italic;
+      text-shadow:0 0 3px rgba(255, 215, 0, 0.25); /* Sombra muy tenue */
+    }
+
+    .chart-block{
+      flex:1;
+      min-width:280px;
+    }
+
+
+/* ======== Estilo iPhone Lunar Card ======== */
+
+.lunar-ios {
+    background: rgba(255,255,255,0.04);
+    padding: 28px;
+    border-radius: 22px;
+    box-shadow:
+        inset 0 0 12px rgba(255,255,255,0.05),
+        0 8px 22px rgba(0,0,0,0.35);
+    backdrop-filter: blur(10px);
+    transition: 0.25s;
+    min-width: 320px;
+}
+
+.lunar-ios:hover {
+    transform: scale(1.02);
+    box-shadow:
+        inset 0 0 16px rgba(255,255,255,0.07),
+        0 12px 30px rgba(0,0,0,0.45);
+}
+
+.lunar-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.lunar-icon-title {
+    font-family: 'Material Symbols Rounded';
+    font-size: 28px;
+    color: #C8C9CC;
+}
+
+.lunar-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #EEE;
+}
+
+.lunar-moon-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+.moon-emoji {
+    font-size: 60px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+}
+
+.lunar-phase-name {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: #DCDCDC;
+    margin-bottom: 15px;
+}
+
+.divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.10);
+    margin: 12px 0 18px 0;
+}
+
+.lunar-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+}
+
+.label-ios {
+    font-size: 16px;
+    color: #B7B7B7;
+}
+
+.value-ios {
+    font-size: 17px;
+    font-weight: 600;
+    color: #EEE;
+}
+
+
+
+
+  </style>
+</head>
+
+<body>
+
+  <h1>Monitor Ambiental ESP8266/DHT22</h1>
+
+<div class="panel" 
+     style="
+        display:flex;
+        gap:25px;
+        align-items:flex-start;
+        padding:25px 28px;
+        width:100%;
+        max-width:650px;   <!-- ==== cuánto puede crecer la tarjeta como máximo ==== -->
+        margin:20px auto;
+     ">
+
+    <!-- ==================== SECCIÓN CLIMA ==================== -->
+    <div style="flex:1; min-width:260px; padding-right:10px;">
+
+        <div class="section-title">
+            <span class="icon icon-temp">wb_sunny</span>
+            Temperatura
+        </div>
+        <div class="label">Actual: <span id="temp" class="value">--.-</span> °C</div>
+
+        <hr>
+
+        <div class="section-title">
+            <span class="icon icon-hum">water_drop</span>
+            Humedad
+        </div>
+        <div class="label">Actual: <span id="hum" class="value">--.-</span> %</div>
+
+        <hr>
+
+        <div class="label">
+            Temp Min/Max:
+            <span id="tmin" class="value">--.-</span> /
+            <span id="tmax" class="value">--.-</span> °C
+        </div>
+
+        <div class="label">
+            Hum Min/Max:
+            <span id="hmin" class="value">--.-</span> /
+            <span id="hmax" class="value">--.-</span> %
+        </div>
+
+        <hr>
+
+        <div class="section-title">
+            <span class="icon icon-time">schedule</span>
+            Última actualización
+        </div>
+
+        <div class="label">
+            <span id="time" class="value">--/--/---- --:--:--</span>
+        </div>
+
+    </div>
+
+
+    <!-- ==================== SECCIÓN LUNAR ==================== -->
+    <div style="flex:1; min-width:240px; padding-left:10px;">
+
+        <div class="lunar-header" style="margin-bottom:10px;">
+            <span class="lunar-icon-title">nightlight</span>
+            <span class="lunar-title">Fase Lunar</span>
+        </div>
+
+        <div class="lunar-moon-icon" style="margin-bottom:6px;">
+            <span id="moonIcon" class="moon-emoji">🌑</span>
+        </div>
+
+        <div class="lunar-phase-name" style="margin-bottom:10px;">
+            <span id="moonName">--</span>
+        </div>
+
+        <div class="divider" style="margin:10px 0;"></div>
+
+        <div class="lunar-row" style="padding:2px 0;">
+            <span class="label-ios">Próxima Luna Nueva</span>
+            <span id="nextNewMoon" class="value-ios">--/--/----</span>
+        </div>
+
+        <div class="lunar-row" style="padding:2px 0;">
+            <span class="label-ios">Próxima Luna Llena</span>
+            <span id="nextFullMoon" class="value-ios">--/--/----</span>
+        </div>
+
+    </div>
+
+</div>
+
+  <!-- ===========================
+       GRÁFICOS
+       =========================== -->
+  <div class="charts">
+    <div class="chart-block">
+      <h3>Temperatura (últimos segundos)</h3>
+      <canvas id="tempChart"></canvas>
+    </div>
+    <div class="chart-block">
+      <h3>Humedad (últimos segundos)</h3>
+      <canvas id="humChart"></canvas>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-block">
+      <h3>Temperatura (última hora)</h3>
+      <canvas id="tempHourChart"></canvas>
+    </div>
+    <div class="chart-block">
+      <h3>Humedad (última hora)</h3>
+      <canvas id="humHourChart"></canvas>
+    </div>
+  </div>
+
+  <div class="footer">by: Luciano Aromi</div>
+
+
+<script>
+let tempChart, humChart;
+let tempHourChart, humHourChart;
+
+const HOUR_POINTS = 60;
+let lastPlotSize = 0;
+
+// Suavizado tiempo real
+let bufferTemp = [];
+let bufferHum  = [];
+
+function smooth(values, windowSize = 5) {
+    if (values.length < windowSize) return values[values.length - 1];
+    let sum = 0;
+    for (let i = values.length - windowSize; i < values.length; i++) sum += values[i];
+    return sum / windowSize;
+}
+
+function crearGraficos() {
+
+    // === Tiempo real ===
+    const tctx = document.getElementById('tempChart').getContext('2d');
+    const hctx = document.getElementById('humChart').getContext('2d');
+
+    tempChart = new Chart(tctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{
+            label: 'Temperatura (°C)',
+            data: [],
+            borderColor: 'rgba(255,99,132,1)',
+            backgroundColor: 'rgba(255,99,132,0.25)',
+            tension: 0.4,
+            pointRadius: 0
+        }]},
+        options: {
+            animation: false,
+            scales: {
+                x: {
+                    display: false,
+                    grid: {
+                        color: "rgba(255,255,255,0.12)",
+                        lineWidth: 1
+                    }
+                },
+                y: {
+                    beginAtZero: false,
+                    grid: {
+                        color: "rgba(255,255,255,0.12)",
+                        lineWidth: 1
+                    },
+                    ticks: {
+                        callback: function(v){ return v.toFixed(1); }
+                    }
+                }
+            }
+        }
+    });
+
+    humChart = new Chart(hctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{
+            label: 'Humedad (%)',
+            data: [],
+            borderColor: 'rgba(54,162,235,1)',
+            backgroundColor: 'rgba(54,162,235,0.25)',
+            tension: 0.4,
+            pointRadius: 0
+        }]},
+        options: {
+            animation: false,
+            scales: {
+                x: {
+                    display: false,
+                    grid: {
+                        color: "rgba(255,255,255,0.12)",
+                        lineWidth: 1
+                    }
+                },
+                y: {
+                    beginAtZero: false,
+                    suggestedMax: 100,
+                    grid: {
+                        color: "rgba(255,255,255,0.12)",
+                        lineWidth: 1
+                    },
+                    ticks: {
+                        callback:function(v){ return v.toFixed(1); }
+                    }
+                }
+           }
+        }
+    });
+
+    // === Última hora (scatter FIFO) ===
+    const thctx = document.getElementById('tempHourChart').getContext('2d');
+    const hhctx = document.getElementById('humHourChart').getContext('2d');
+
+    tempHourChart = new Chart(thctx, {
+        type: 'scatter',
+        data: { datasets: [{
+            label: 'Temp 1h (°C)',
+            data: [],
+            borderColor:'rgba(255,99,132,1)',
+            backgroundColor:'rgba(255,99,132,1)',
+            showLine:false,
+            pointRadius:3
+        }]},
+        options:{
+            animation:false,
+            scales:{
+                x:{
+                    type:'linear',
+                    min:0,
+                    max:HOUR_POINTS-1,
+                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 }
+                },
+                y:{
+                    beginAtZero:false,
+                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 },
+                    ticks:{ callback:function(v){ return v.toFixed(1); } }
+                }
+            }
+        }
+    });
+
+    humHourChart = new Chart(hhctx, {
+        type:'scatter',
+        data:{ datasets:[{
+            label:'Hum 1h (%)',
+            data:[],
+            borderColor:'rgba(54,162,235,1)',
+            backgroundColor:'rgba(54,162,235,1)',
+            showLine:false,
+            pointRadius:3
+        }]},
+        options:{
+            animation:false,
+            scales:{
+                x:{
+                    type:'linear',
+                    min:0,
+                    max:HOUR_POINTS-1,
+                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 }
+                },
+                y:{
+                    beginAtZero:false,
+                    suggestedMax:100,
+                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 },
+                    ticks:{ callback:function(v){ return v.toFixed(0); } }
+                }
+            }
+        }
+    });
+}
+
+// Agrega punto FIFO tiempo real
+function agregarPunto(chart,label,value,maxPts){
+    chart.data.labels.push(label);
+    chart.data.datasets[0].data.push(value);
+
+   if(chart.data.labels.length > maxPts){
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+    }
+
+    chart.update();
+}
+
+function actualizarDatos(){
+
+    fetch('/data')
+        .then(r=>r.json())
+        .then(d=>{
+
+            // ==== Panel ====
+            document.getElementById('temp').textContent = d.temp.toFixed(1);
+            document.getElementById('hum').textContent  = d.hum.toFixed(1);
+            document.getElementById('tmin').textContent = d.tmin.toFixed(1);
+            document.getElementById('tmax').textContent = d.tmax.toFixed(1);
+            document.getElementById('hmin').textContent = d.hmin.toFixed(1);
+            document.getElementById('hmax').textContent = d.hmax.toFixed(1);
+            document.getElementById('time').textContent = d.time;
+
+document.getElementById("moonIcon").textContent = d.moonIcon;
+document.getElementById("moonName").textContent = d.moonName;
+document.getElementById("nextNewMoon").textContent = d.nextNewMoon;
+document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
+
+
+
+
+            // ==== Suavizado tiempo real ====
+            bufferTemp.push(d.temp);
+            bufferHum.push(d.hum);
+
+            if(bufferTemp.length > 50) bufferTemp.shift();
+            if(bufferHum.length > 50) bufferHum.shift();
+
+            const tempSmoothed = smooth(bufferTemp);
+            const humSmoothed = smooth(bufferHum);
+
+            // Agregar puntos
+            agregarPunto(tempChart, d.time, tempSmoothed, 40);
+            agregarPunto(humChart , d.time, humSmoothed, 40);
+
+            // Rango dinámico
+            tempChart.options.scales.y.min = tempSmoothed - 0.5;
+            tempChart.options.scales.y.max = tempSmoothed + 0.5;
+
+            humChart.options.scales.y.min = humSmoothed - 2;
+            humChart.options.scales.y.max = humSmoothed + 2;
+
+            tempChart.update();
+            humChart.update();
+
+            // ==== Gráfico de 1 hora ====
+            const hc = d.hcount;
+
+            tempHourChart.data.datasets[0].data = [];
+            humHourChart.data.datasets[0].data = [];
+
+            for (let i = 0; i < hc; i++) {
+                tempHourChart.data.datasets[0].data.push({ x: i, y: d.histT[i] });
+                humHourChart.data.datasets[0].data.push({ x: i, y: d.histH[i] });
+            }
+
+            if (hc > 2) {
+                const minT = Math.min(...d.histT);
+                const maxT = Math.max(...d.histT);
+                tempHourChart.options.scales.y.min = minT - 4;
+                tempHourChart.options.scales.y.max = maxT + 4;
+
+                const minH = Math.min(...d.histH);
+                const maxH = Math.max(...d.histH);
+                humHourChart.options.scales.y.min = minH - 20;
+                humHourChart.options.scales.y.max = maxH + 20;
+            }
+
+            tempHourChart.update();
+            humHourChart.update();
+        });
+}
+
+window.onload = function(){
+    crearGraficos();
+    setInterval(actualizarDatos,2000);
+};
+</script>
+
+
+
+</body>
+</html>
+
+)rawliteral");
+
+  client.stop();
+}
