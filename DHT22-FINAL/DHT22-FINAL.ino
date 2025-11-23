@@ -3,6 +3,7 @@
 #include <WiFiClientSecure.h>
 #include <DHT.h>
 #include <time.h>
+#include <FS.h>           // SPIFFS para almacenamiento interno
 
 // =============================
 // CONFIG WIFI
@@ -40,7 +41,7 @@ unsigned long lastHistSample = 0; // para sampleo cada 60s
 // =============================
 // TELEGRAM CONFIG
 // =============================
-const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
+const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";  // 
 const String CHAT_ID        = "5144677839";
 
 const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
@@ -48,6 +49,14 @@ unsigned long lastAlert = 0;                 // tiempo del último aviso
 const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
 
 WiFiServer server(80);
+
+// =============================
+// LOG EN SPIFFS (HASTA ~1 MES)
+// =============================
+const char* LOG_FILE = "/historial.csv";
+const unsigned long MAX_LOG_LINES = 43200UL; // 60 * 24 * 30  (1 por minuto, 30 días aprox)
+bool spiffsOk = false;
+unsigned long logLines = 0;
 
 // =============================
 // HORA NTP (ARGENTINA GMT-3)
@@ -139,7 +148,6 @@ bool leerDHT() {
   HUMEDAD     = sumaH / validas;
 
   // === CORRECCIÓN DE HUMEDAD ======================
-  // Ajustá este valor según la diferencia real (+/-)
   HUMEDAD = HUMEDAD - 9.0;  
 
   // Limitar valores
@@ -155,6 +163,70 @@ bool leerDHT() {
   return true;
 }
 
+// =============================
+// INICIALIZAR LOG EN SPIFFS
+// =============================
+void iniciarLog() {
+  if (!SPIFFS.exists(LOG_FILE)) {
+    File f = SPIFFS.open(LOG_FILE, "w");
+    if (f) {
+      f.println("FechaHora,Temperatura,Hum.edad");
+      f.close();
+    }
+    logLines = 0;
+    Serial.println("Log creado nuevo.");
+    return;
+  }
+
+  File f = SPIFFS.open(LOG_FILE, "r");
+  if (!f) {
+    logLines = 0;
+    Serial.println("No se pudo abrir log existente.");
+    return;
+  }
+
+  bool first = true;
+  logLines = 0;
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    if (first) {          // saltar cabecera
+      first = false;
+      continue;
+    }
+    if (line.length() > 1) logLines++;
+  }
+  f.close();
+  Serial.printf("Log existente con %lu lineas.\n", logLines);
+}
+
+// =============================
+// AGREGAR REGISTRO AL LOG
+// =============================
+void agregarRegistroLog(const String &fechaHora, float t, float h) {
+  if (!spiffsOk) return;
+
+  File f = SPIFFS.open(LOG_FILE, "a");
+  if (!f) {
+    Serial.println("No se pudo abrir log para escribir.");
+    return;
+  }
+
+  f.printf("%s,%.1f,%.1f\r\n", fechaHora.c_str(), t, h);
+  f.close();
+
+  logLines++;
+
+  if (logLines >= MAX_LOG_LINES) {
+    Serial.println("Limite de 1 mes alcanzado, reiniciando log...");
+    SPIFFS.remove(LOG_FILE);
+    File nf = SPIFFS.open(LOG_FILE, "w");
+    if (nf) {
+      nf.println("FechaHora,Temperatura,Hum.edad");
+      nf.close();
+    }
+    logLines = 0;
+  }
+}
 
 // =============================
 // GUARDAR MUESTRA EN HISTORIAL (cada minuto)
@@ -162,19 +234,21 @@ bool leerDHT() {
 void actualizarHistorial() {
   unsigned long ahora = millis();
 
-  // 10 segundos (antes era 60000 ms)
-  if (ahora - lastHistSample >= 60000) {
+  if (ahora - lastHistSample >= 60000) {   // 1 minuto
     lastHistSample = ahora;
 
     histTemp[histIndex] = TEMPERATURA;
     histHum[histIndex]  = HUMEDAD;
+
+    // Guardar en log con fecha real
+    String fecha = obtenerFechaHora();
+    agregarRegistroLog(fecha, TEMPERATURA, HUMEDAD);
 
     histIndex = (histIndex + 1) % HOUR_POINTS;
 
     if (histCount < HOUR_POINTS) histCount++;
   }
 }
-
 
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
@@ -209,7 +283,6 @@ double edadLunar() {
   return age;
 }
 
-
 // ---- Fecha futura sumando días ----
 String fechaFutura(double dias) {
   time_t now = time(nullptr);
@@ -222,7 +295,6 @@ String fechaFutura(double dias) {
 
   return String(buf);
 }
-
 
 // ---- Próximas luna nueva y luna llena ----
 void calcularLunas(String &proximaNueva, String &proximaLlena) {
@@ -237,7 +309,6 @@ void calcularLunas(String &proximaNueva, String &proximaLlena) {
   proximaNueva = fechaFutura(dn);
   proximaLlena = fechaFutura(dl);
 }
-
 
 // ---- Fase lunar en 0–7 ----
 int faseLunar() {
@@ -255,7 +326,6 @@ int faseLunar() {
   return 0;
 }
 
-
 // ---- Nombre de fase (hemisferio sur) ----
 String faseNombre(int f) {
   switch(f) {
@@ -271,7 +341,6 @@ String faseNombre(int f) {
   return "Desconocida";
 }
 
-
 // ---- Iconos lunares (hemisferio sur) ----
 String faseIcono(int f) {
   switch(f) {
@@ -286,8 +355,6 @@ String faseIcono(int f) {
   }
   return "🌑";
 }
-
-
 
 // =============================
 // SETUP
@@ -310,17 +377,27 @@ void setup() {
   // NTP GMT-3 (Argentina)
   configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
-  // Inicializar historial
+  // Inicializar historial en RAM
   for (int i = 0; i < HOUR_POINTS; i++) {
     histTemp[i] = NAN;
     histHum[i]  = NAN;
   }
   lastHistSample = millis();
 
+  // Montar SPIFFS
+  if (SPIFFS.begin()) {
+    spiffsOk = true;
+    Serial.println("SPIFFS montado correctamente.");
+    iniciarLog();
+  } else {
+    spiffsOk = false;
+    Serial.println("❌ Error montando SPIFFS.");
+  }
+
   server.begin();
 
-  // Mensaje inicial a Telegram
-  enviarTelegram("🤖 Sistema iniciado. IP: " + WiFi.localIP().toString());
+// Enviar primer mensaje a Telegram cuando todo ya está listo
+enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 }
 
 // =============================
@@ -336,7 +413,7 @@ void loop() {
     if (leerDHT()) {
       Serial.printf("Temp: %.1f C | Hum: %.1f %%\n", TEMPERATURA, HUMEDAD);
 
-      // Actualizar historial de 1 hora
+      // Actualizar historial de 1 hora + log en SPIFFS
       actualizarHistorial();
 
       // Alerta por temperatura
@@ -353,7 +430,7 @@ void loop() {
   }
 
   // =============================
-  // SERVIDOR WEB CON PÁGINA HTML
+  // SERVIDOR WEB
   // =============================
   WiFiClient client = server.available();
   if (!client) return;
@@ -375,75 +452,108 @@ void loop() {
     if (header.length() == 1) break;
   }
 
-  // Endpoint JSON /data
-// Endpoint JSON /data
-if (requestLine.indexOf("GET /data") >= 0) {
-  String fechaHora = obtenerFechaHora();
+  // ===== Endpoint JSON /data =====
+  if (requestLine.indexOf("GET /data") >= 0) {
+    String fechaHora = obtenerFechaHora();
 
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: application/json");
-  client.println("Connection: close");
-  client.println();
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
 
-  client.print("{\"temp\":");
-  client.print(TEMPERATURA, 1);
-  client.print(",\"hum\":");
-  client.print(HUMEDAD, 1);
-  client.print(",\"tmin\":");
-  client.print(tempMin, 1);
-  client.print(",\"tmax\":");
-  client.print(tempMax, 1);
-  client.print(",\"hmin\":");
-  client.print(humMin, 1);
-  client.print(",\"hmax\":");
-  client.print(humMax, 1);
-  client.print(",\"time\":\"");
-  client.print(fechaHora);
-  client.print("\",\"hcount\":");
-  client.print(histCount);
+    client.print("{\"temp\":");
+    client.print(TEMPERATURA, 1);
+    client.print(",\"hum\":");
+    client.print(HUMEDAD, 1);
+    client.print(",\"tmin\":");
+    client.print(tempMin, 1);
+    client.print(",\"tmax\":");
+    client.print(tempMax, 1);
+    client.print(",\"hmin\":");
+    client.print(humMin, 1);
+    client.print(",\"hmax\":");
+    client.print(humMax, 1);
+    client.print(",\"time\":\"");
+    client.print(fechaHora);
+    client.print("\",\"hcount\":");
+    client.print(histCount);
 
-// === FASE LUNAR ===
-int f = faseLunar();
+    // === FASE LUNAR ===
+    int f = faseLunar();
+    client.print(",\"moonIcon\":\"");
+    client.print(faseIcono(f));
+    client.print("\",\"moonName\":\"");
+    client.print(faseNombre(f));
 
-client.print(",\"moonIcon\":\"");
-client.print(faseIcono(f));
+    String lunaNueva, lunaLlena;
+    calcularLunas(lunaNueva, lunaLlena);
 
-client.print("\",\"moonName\":\"");
-client.print(faseNombre(f));
+    client.print("\",\"nextNewMoon\":\"");
+    client.print(lunaNueva);
+    client.print("\",\"nextFullMoon\":\"");
+    client.print(lunaLlena);
+    client.print("\"");
 
-String lunaNueva, lunaLlena;
-calcularLunas(lunaNueva, lunaLlena);
+    // Historial 1h
+    client.print(",\"histT\":[");
+    for (int i = 0; i < histCount; i++) {
+      int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
+      if (i > 0) client.print(",");
+      client.print(histTemp[idx], 1);
+    }
 
-// nombres correctos del JSON
-client.print("\",\"nextNewMoon\":\"");
-client.print(lunaNueva);
+    client.print("],\"histH\":[");
+    for (int i = 0; i < histCount; i++) {
+      int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
+      if (i > 0) client.print(",");
+      client.print(histHum[idx], 1);
+    }
+    client.println("]}");
 
-client.print("\",\"nextFullMoon\":\"");
-client.print(lunaLlena);
-client.print("\"");
-
-
-  client.print(",\"histT\":[");
-  for (int i = 0; i < histCount; i++) {
-    int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
-    if (i > 0) client.print(",");
-    client.print(histTemp[idx], 1);
+    client.stop();
+    return;
   }
 
-  client.print("],\"histH\":[");
-  for (int i = 0; i < histCount; i++) {
-    int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
-    if (i > 0) client.print(",");
-    client.print(histHum[idx], 1);
+  // ===== Endpoint CSV /csv =====
+  if (requestLine.indexOf("GET /csv") >= 0) {
+    if (!spiffsOk || !SPIFFS.exists(LOG_FILE)) {
+      client.println("HTTP/1.1 500 Internal Server Error");
+      client.println("Content-Type: text/plain");
+      client.println("Connection: close");
+      client.println();
+      client.println("Log no disponible");
+      client.stop();
+      return;
+    }
+
+    File f = SPIFFS.open(LOG_FILE, "r");
+    if (!f) {
+      client.println("HTTP/1.1 500 Internal Server Error");
+      client.println("Content-Type: text/plain");
+      client.println("Connection: close");
+      client.println();
+      client.println("No se pudo abrir el log");
+      client.stop();
+      return;
+    }
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/csv");
+    client.println("Content-Disposition: attachment; filename=\"historial_dht22.csv\"");
+    client.println("Connection: close");
+    client.println();
+
+    uint8_t buf[512];
+    while (f.available()) {
+      size_t len = f.read(buf, sizeof(buf));
+      client.write(buf, len);
+    }
+    f.close();
+    client.stop();
+    return;
   }
-  client.println("]}");
 
-  client.stop();
-  return;
-}
-
-
-  // Página principal (HTML)
+  // ===== Página principal (HTML) =====
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -456,9 +566,7 @@ client.print("\"");
   <meta charset="utf-8">
   <title>Monitor Ambiental ESP8266/DHT22</title>
 
-  <!-- GOOGLE MATERIAL ICONS -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
@@ -498,11 +606,9 @@ client.print("\"");
       vertical-align:middle;
     }
 
-    /* COLORES NUMÉRICOS */
     #temp{ color:#FFD700; }
     #hum{  color:#00B4FF; }
 
-    /* Íconos coloreados */
     .icon-temp { color:#FFC107; }
     .icon-hum  { color:#03A9F4; }
     .icon-time { color:#4CAF50; }
@@ -529,9 +635,9 @@ client.print("\"");
       margin-top:25px;
       font-size:16px;
       font-family:Georgia, serif;
-      color:#DAA5;                           /* Amarillo suave */
+      color:#DAA5;
       font-style:italic;
-      text-shadow:0 0 3px rgba(255, 215, 0, 0.25); /* Sombra muy tenue */
+      text-shadow:0 0 3px rgba(255, 215, 0, 0.25);
     }
 
     .chart-block{
@@ -539,92 +645,104 @@ client.print("\"");
       min-width:280px;
     }
 
+    /* ======== Estilo iPhone Lunar Card ======== */
+    .lunar-ios {
+        background: rgba(255,255,255,0.04);
+        padding: 28px;
+        border-radius: 22px;
+        box-shadow:
+            inset 0 0 12px rgba(255,255,255,0.05),
+            0 8px 22px rgba(0,0,0,0.35);
+        backdrop-filter: blur(10px);
+        transition: 0.25s;
+        min-width: 320px;
+    }
 
-/* ======== Estilo iPhone Lunar Card ======== */
+    .lunar-ios:hover {
+        transform: scale(1.02);
+        box-shadow:
+            inset 0 0 16px rgba(255,255,255,0.07),
+            0 12px 30px rgba(0,0,0,0.45);
+    }
 
-.lunar-ios {
-    background: rgba(255,255,255,0.04);
-    padding: 28px;
-    border-radius: 22px;
-    box-shadow:
-        inset 0 0 12px rgba(255,255,255,0.05),
-        0 8px 22px rgba(0,0,0,0.35);
-    backdrop-filter: blur(10px);
-    transition: 0.25s;
-    min-width: 320px;
-}
+    .lunar-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
 
-.lunar-ios:hover {
-    transform: scale(1.02);
-    box-shadow:
-        inset 0 0 16px rgba(255,255,255,0.07),
-        0 12px 30px rgba(0,0,0,0.45);
-}
+    .lunar-icon-title {
+        font-family: 'Material Symbols Rounded';
+        font-size: 28px;
+        color: #C8C9CC;
+    }
 
-.lunar-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
-}
+    .lunar-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: #EEE;
+    }
 
-.lunar-icon-title {
-    font-family: 'Material Symbols Rounded';
-    font-size: 28px;
-    color: #C8C9CC;
-}
+    .lunar-moon-icon {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
+    }
 
-.lunar-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: #EEE;
-}
+    .moon-emoji {
+        font-size: 60px;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+    }
 
-.lunar-moon-icon {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 10px;
-}
+    .lunar-phase-name {
+        text-align: center;
+        font-size: 20px;
+        font-weight: 600;
+        color: #DCDCDC;
+        margin-bottom: 15px;
+    }
 
-.moon-emoji {
-    font-size: 60px;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
-}
+    .divider {
+        width: 100%;
+        height: 1px;
+        background: rgba(255,255,255,0.10);
+        margin: 12px 0 18px 0;
+    }
 
-.lunar-phase-name {
-    text-align: center;
-    font-size: 20px;
-    font-weight: 600;
-    color: #DCDCDC;
-    margin-bottom: 15px;
-}
+    .lunar-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+    }
 
-.divider {
-    width: 100%;
-    height: 1px;
-    background: rgba(255,255,255,0.10);
-    margin: 12px 0 18px 0;
-}
+    .label-ios {
+        font-size: 16px;
+        color: #B7B7B7;
+    }
 
-.lunar-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-}
+    .value-ios {
+        font-size: 17px;
+        font-weight: 600;
+        color: #EEE;
+    }
 
-.label-ios {
-    font-size: 16px;
-    color: #B7B7B7;
-}
-
-.value-ios {
-    font-size: 17px;
-    font-weight: 600;
-    color: #EEE;
-}
-
-
-
+    /* Botón CSV */
+    #btnCSV{
+      margin:20px auto;
+      display:block;
+      padding:10px 22px;
+      background:#27293d;
+      color:#fff;
+      border:1px solid #444;
+      border-radius:8px;
+      font-size:16px;
+      cursor:pointer;
+      box-shadow:0 0 8px rgba(0,0,0,0.4);
+    }
+    #btnCSV:hover{
+      background:#343754;
+    }
 
   </style>
 </head>
@@ -633,16 +751,18 @@ client.print("\"");
 
   <h1>Monitor Ambiental ESP8266/DHT22</h1>
 
-<div class="panel" 
-     style="
-        display:flex;
-        gap:25px;
-        align-items:flex-start;
-        padding:25px 28px;
-        width:100%;
-        max-width:650px;   <!-- ==== cuánto puede crecer la tarjeta como máximo ==== -->
-        margin:20px auto;
-     ">
+  <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
+    <div class="panel"
+        style="
+            display:flex;
+            gap:20px;
+            align-items:flex-start;
+            padding:20px 25px;
+            width: 100%;
+            max-width: 650px;
+            margin:20px auto;
+        ">
+
 
     <!-- ==================== SECCIÓN CLIMA ==================== -->
     <div style="flex:1; min-width:260px; padding-right:10px;">
@@ -688,38 +808,40 @@ client.print("\"");
 
     </div>
 
-
     <!-- ==================== SECCIÓN LUNAR ==================== -->
     <div style="flex:1; min-width:240px; padding-left:10px;">
 
-        <div class="lunar-header" style="margin-bottom:10px;">
+        <div class="lunar-header">
             <span class="lunar-icon-title">nightlight</span>
             <span class="lunar-title">Fase Lunar</span>
         </div>
 
-        <div class="lunar-moon-icon" style="margin-bottom:6px;">
+        <div class="lunar-moon-icon">
             <span id="moonIcon" class="moon-emoji">🌑</span>
         </div>
 
-        <div class="lunar-phase-name" style="margin-bottom:10px;">
+        <div class="lunar-phase-name">
             <span id="moonName">--</span>
         </div>
 
-        <div class="divider" style="margin:10px 0;"></div>
+        <div class="divider"></div>
 
-        <div class="lunar-row" style="padding:2px 0;">
+        <div class="lunar-row">
             <span class="label-ios">Próxima Luna Nueva</span>
             <span id="nextNewMoon" class="value-ios">--/--/----</span>
         </div>
 
-        <div class="lunar-row" style="padding:2px 0;">
+        <div class="lunar-row">
             <span class="label-ios">Próxima Luna Llena</span>
             <span id="nextFullMoon" class="value-ios">--/--/----</span>
         </div>
 
     </div>
 
-</div>
+  </div>
+
+  <!-- Botón para descargar CSV completo (1 mes aprox) -->
+  <button id="btnCSV">Descargar CSV (Historial)</button>
 
   <!-- ===========================
        GRÁFICOS
@@ -748,15 +870,11 @@ client.print("\"");
 
   <div class="footer">by: Luciano Aromi</div>
 
-
 <script>
 let tempChart, humChart;
 let tempHourChart, humHourChart;
 
 const HOUR_POINTS = 60;
-let lastPlotSize = 0;
-
-// Suavizado tiempo real
 let bufferTemp = [];
 let bufferHum  = [];
 
@@ -769,7 +887,6 @@ function smooth(values, windowSize = 5) {
 
 function crearGraficos() {
 
-    // === Tiempo real ===
     const tctx = document.getElementById('tempChart').getContext('2d');
     const hctx = document.getElementById('humChart').getContext('2d');
 
@@ -842,7 +959,6 @@ function crearGraficos() {
         }
     });
 
-    // === Última hora (scatter FIFO) ===
     const thctx = document.getElementById('tempHourChart').getContext('2d');
     const hhctx = document.getElementById('humHourChart').getContext('2d');
 
@@ -904,12 +1020,11 @@ function crearGraficos() {
     });
 }
 
-// Agrega punto FIFO tiempo real
 function agregarPunto(chart,label,value,maxPts){
     chart.data.labels.push(label);
     chart.data.datasets[0].data.push(value);
 
-   if(chart.data.labels.length > maxPts){
+    if(chart.data.labels.length > maxPts){
         chart.data.labels.shift();
         chart.data.datasets[0].data.shift();
     }
@@ -923,7 +1038,6 @@ function actualizarDatos(){
         .then(r=>r.json())
         .then(d=>{
 
-            // ==== Panel ====
             document.getElementById('temp').textContent = d.temp.toFixed(1);
             document.getElementById('hum').textContent  = d.hum.toFixed(1);
             document.getElementById('tmin').textContent = d.tmin.toFixed(1);
@@ -932,15 +1046,11 @@ function actualizarDatos(){
             document.getElementById('hmax').textContent = d.hmax.toFixed(1);
             document.getElementById('time').textContent = d.time;
 
-document.getElementById("moonIcon").textContent = d.moonIcon;
-document.getElementById("moonName").textContent = d.moonName;
-document.getElementById("nextNewMoon").textContent = d.nextNewMoon;
-document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
+            document.getElementById("moonIcon").textContent = d.moonIcon;
+            document.getElementById("moonName").textContent = d.moonName;
+            document.getElementById("nextNewMoon").textContent = d.nextNewMoon;
+            document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
 
-
-
-
-            // ==== Suavizado tiempo real ====
             bufferTemp.push(d.temp);
             bufferHum.push(d.hum);
 
@@ -950,11 +1060,9 @@ document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
             const tempSmoothed = smooth(bufferTemp);
             const humSmoothed = smooth(bufferHum);
 
-            // Agregar puntos
             agregarPunto(tempChart, d.time, tempSmoothed, 40);
             agregarPunto(humChart , d.time, humSmoothed, 40);
 
-            // Rango dinámico
             tempChart.options.scales.y.min = tempSmoothed - 0.5;
             tempChart.options.scales.y.max = tempSmoothed + 0.5;
 
@@ -964,7 +1072,6 @@ document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
             tempChart.update();
             humChart.update();
 
-            // ==== Gráfico de 1 hora ====
             const hc = d.hcount;
 
             tempHourChart.data.datasets[0].data = [];
@@ -995,10 +1102,13 @@ document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
 window.onload = function(){
     crearGraficos();
     setInterval(actualizarDatos,2000);
+
+    // Botón para descargar el CSV completo almacenado en el ESP
+    document.getElementById("btnCSV").addEventListener("click", function(){
+        window.location.href = "/csv";
+    });
 };
 </script>
-
-
 
 </body>
 </html>
