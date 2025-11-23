@@ -786,84 +786,111 @@ void loop() {
         color: #EEE;
     }
 
+/* Botones responsive */
+#btnCSV, #btnClear {
+    width: clamp(55px, 8vw, 85px);
+    height: clamp(55px, 8vw, 85px);
+    border-radius: 50%;
+}
+
+#btnCSV span.material-symbols-rounded,
+#btnClear span.material-symbols-rounded {
+    font-size: clamp(22px, 4vw, 34px);
+}
+
+#btnCSV span,
+#btnClear span {
+    font-size: clamp(8px, 2vw, 12px);
+}
+
+
 
   </style>
 </head>
 
 <body>
 
-<h1 style="color:#A05C1F;">
+<h1 style="color:#A05C1F; font-size:22px;">
     Monitor Ambiental ESP8266/DHT22
 </h1>
 
+
 <!-- ============================================================================================= -->
 
-<div id="topButtons"
-     style="
-        position: absolute;
-        top: 25px;
-        right: 40px;
-        display: flex;
-        gap: 15px;
-        z-index: 30;
-     ">
+<!-- ===== CONTENEDOR DE BOTONES SUPERIORES ===== -->
+<div style="
+    position:absolute;
+    top:25px;
+    right:40px;
+    display:flex;
+    gap:18px;
+    z-index:50;
+">
 
-    <!-- BOTÓN CLEAR -->
+    <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
     <button id="btnClear"
-            style="
-                width: 75px;
-                height: 75px;
-                border-radius: 50%;
-                background: rgba(255,80,80,0.13);
-                border: 1px solid rgba(255,80,80,0.25);
-                cursor: pointer;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 2px;
-                box-shadow: 0 4px 14px rgba(0,0,0,0.45),
-                            inset 0 0 12px rgba(255,80,80,0.15);
-                transition: 0.25s ease;
-            "
-            onmouseover="this.style.transform='scale(1.12)'"
-            onmouseout="this.style.transform='scale(1)'"
+        style="
+            width:57px;
+            height:57px;
+            border-radius:50%;
+            background: radial-gradient(circle, rgba(255,0,0,0.15), rgba(100,0,0,0.35));
+            backdrop-filter: blur(6px);
+            border:1px solid rgba(255,0,0,0.28);
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:2px;
+            box-shadow:
+                0 4px 14px rgba(0,0,0,0.45),
+                inset 0 0 10px rgba(255,0,0,0.22);
+            transition:0.25s ease;
+        "
+        onmouseover="this.style.transform='scale(1.12)'"
+        onmouseout="this.style.transform='scale(1)'"
     >
-        <span class="material-symbols-rounded" style="font-size:30px; color:#ff5757;">
+        <span class="material-symbols-rounded"
+            style="font-size:30px; color:#FF4D4D;">
             delete
         </span>
-        <span style="font-size:10px; color:#e5e5e5;">CLEAR</span>
+        <span style="font-size:9px; color:#ffecec;">CLEAR</span>
     </button>
 
-    <!-- BOTÓN CSV -->
+
+    <!-- ========== BOTÓN CSV (VERDE) ========== -->
     <button id="btnCSV"
-            style="
-                width: 75px;
-                height: 75px;
-                border-radius: 50%;
-                background: rgba(255,255,255,0.06);
-                backdrop-filter: blur(8px);
-                border: 1px solid rgba(255,255,255,0.18);
-                cursor: pointer;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 2px;
-                box-shadow: 0 4px 14px rgba(0,0,0,0.45),
-                            inset 0 0 12px rgba(255,255,255,0.08);
-                transition: 0.25s ease;
-            "
-            onmouseover="this.style.transform='scale(1.12)'"
-            onmouseout="this.style.transform='scale(1)'"
+        style="
+            width:57px;
+            height:57px;
+            border-radius:50%;
+            background: radial-gradient(circle, rgba(0,255,0,0.11), rgba(0,80,0,0.35));
+            backdrop-filter: blur(6px);
+            border:1px solid rgba(0,255,0,0.28);
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:2px;
+            box-shadow:
+                0 4px 14px rgba(0,0,0,0.45),
+                inset 0 0 10px rgba(0,255,0,0.20);
+            transition:0.25s ease;
+        "
+        onmouseover="this.style.transform='scale(1.12)'"
+        onmouseout="this.style.transform='scale(1)'"
     >
-        <span class="material-symbols-rounded" style="font-size:30px; color:#4CAF50;">
+        <span class="material-symbols-rounded"
+            style="font-size:30px; color:#4CAF50;">
             table
         </span>
-        <span style="font-size:10px; color:#e5e5e5;">.CSV</span>
+
+        <span style="font-size:9px; color:#e5ffe5;">.CSV</span>
     </button>
 
 </div>
+
 
 <!-- ============================================================================================= -->
 
