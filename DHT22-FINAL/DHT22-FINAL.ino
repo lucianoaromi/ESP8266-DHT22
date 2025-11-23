@@ -751,17 +751,45 @@ void loop() {
 
   <h1>Monitor Ambiental ESP8266/DHT22</h1>
 
-  <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
-    <div class="panel"
+
+<button id="btnCSV"
         style="
-            display:flex;
-            gap:20px;
-            align-items:flex-start;
-            padding:20px 25px;
-            width: 100%;
-            max-width: 650px;
-            margin:20px auto;
+            position: absolute;
+            top: 25px;
+            right: 40px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: #2a2d3d;
+            color: #fff;
+            border: 1px solid #444;
+            cursor: pointer;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 8px rgba(0,0,0,0.45);
+            z-index: 20;
         ">
+    CSV
+</button>
+
+
+
+  <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
+<div class="panel"
+     style="
+        position:relative;
+        display:flex;
+        gap:20px;
+        align-items:flex-start;
+        padding:20px 25px;
+        width:100%;
+        max-width:650px;
+        margin:20px auto;
+     ">
+    </button>
+
 
 
     <!-- ==================== SECCIÓN CLIMA ==================== -->
@@ -841,7 +869,6 @@ void loop() {
   </div>
 
   <!-- Botón para descargar CSV completo (1 mes aprox) -->
-  <button id="btnCSV">Descargar CSV (Historial)</button>
 
   <!-- ===========================
        GRÁFICOS
