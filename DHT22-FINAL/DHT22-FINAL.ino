@@ -54,6 +54,8 @@ const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
 
 WiFiServer server(80);
 
+
+
 // =============================
 // LOG EN SPIFFS (HASTA ~1 MES)
 // =============================
@@ -105,26 +107,50 @@ String urlEncode(const String &text) {
 // =============================
 // ENVIAR MENSAJE TELEGRAM
 // =============================
-void enviarTelegram(String mensaje) {
+
+
+void enviarTelegram(const String &mensaje) {
   WiFiClientSecure client;
+
   client.setInsecure();
+  client.setTimeout(5000);
+  client.setBufferSizes(512, 512);  // ← MUY IMPORTANTE EN ESP8266
+
+  Serial.println("📡 Conectando a Telegram...");
 
   if (!client.connect("api.telegram.org", 443)) {
     Serial.println("❌ Error conectando a Telegram");
     return;
   }
 
-  String m = urlEncode(mensaje);
+  delay(150); // Telegram lo necesita
 
   String url = "/bot" + TELEGRAM_TOKEN +
                "/sendMessage?chat_id=" + CHAT_ID +
-               "&text=" + m;
+               "&text=" + urlEncode(mensaje);
 
-  client.print(String("GET ") + url +
-               " HTTP/1.1\r\nHost: api.telegram.org\r\nConnection: close\r\n\r\n");
+  client.print(
+    String("GET ") + url + " HTTP/1.1\r\n" +
+    "Host: api.telegram.org\r\n" +
+    "User-Agent: ESP8266\r\n" +
+    "Connection: close\r\n\r\n"
+  );
 
-  Serial.println("📨 Telegram enviado: " + mensaje);
+  Serial.println("📨 Enviando mensaje a Telegram...");
+
+  // Leer solo la primer línea de respuesta
+  String line = client.readStringUntil('\n');
+  if (line.startsWith("HTTP/1.1 200")) {
+    Serial.println("✅ Telegram enviado correctamente");
+  } else {
+    Serial.println("⚠ Respuesta inesperada: " + line);
+  }
+
+  client.stop();
 }
+
+
+
 
 // =============================
 // LECTURA DEL DHT22
