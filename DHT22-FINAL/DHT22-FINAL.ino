@@ -743,7 +743,11 @@ void loop() {
 
 <body>
 
-  <h1>Monitor Ambiental ESP8266/DHT22</h1>
+<h1 style="color:#A05C1F;">
+    Monitor Ambiental ESP8266/DHT22
+</h1>
+
+
 
 
 <button id="btnCSV"
@@ -774,7 +778,7 @@ void loop() {
     >
 
     <!-- ICONO -->
-    <span class="material-symbols-rounded" style="font-size:32px; color:#4CAF50;">
+    <span class="material-symbols-rounded" style="font-size:30px; color:#4CAF50;">
         table
     </span>
 
