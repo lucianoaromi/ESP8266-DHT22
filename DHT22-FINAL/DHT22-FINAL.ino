@@ -831,9 +831,9 @@ void loop() {
             width:57px;
             height:57px;
             border-radius:50%;
-            background: radial-gradient(circle, rgba(90,0,0,0.15), rgba(40,0,0,0.35));
+            background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
             backdrop-filter: blur(6px);
-            border:1px solid rgba(160,0,0,0.45);
+            border:1px solid rgba(120,0,0,0.55);
             cursor:pointer;
             display:flex;
             flex-direction:column;
@@ -841,15 +841,15 @@ void loop() {
             justify-content:center;
             gap:2px;
             box-shadow:
-                0 4px 14px rgba(0,0,0,0.45),
-                inset 0 0 10px rgba(255,0,0,0.22);
+                0 4px 14px rgba(0,0,0,0.50),
+                inset 0 0 10px rgba(180,0,0,0.25);
             transition:0.25s ease;
         "
         onmouseover="this.style.transform='scale(1.12)'"
         onmouseout="this.style.transform='scale(1)'"
     >
         <span class="material-symbols-rounded"
-            style="font-size:30px; color:#B73737;">
+            style="font-size:30px; color:#8F2A2A;">
             delete
         </span>
         <span style="font-size:9px; color:#ffecec;">CLEAR</span>
@@ -862,9 +862,9 @@ void loop() {
             width:57px;
             height:57px;
             border-radius:50%;
-            background: radial-gradient(circle, rgba(0,90,0,0.15), rgba(0,40,0,0.35));
+            background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
             backdrop-filter: blur(6px);
-            border:1px solid rgba(0,120,0,0.35);
+            border:1px solid rgba(0,100,0,0.55);
             cursor:pointer;
             display:flex;
             flex-direction:column;
@@ -872,15 +872,15 @@ void loop() {
             justify-content:center;
             gap:2px;
             box-shadow:
-                0 4px 14px rgba(0,0,0,0.45),
-                inset 0 0 10px rgba(0,255,0,0.20);
+                0 4px 14px rgba(0,0,0,0.50),
+                inset 0 0 10px rgba(0,160,0,0.25);
             transition:0.25s ease;
         "
         onmouseover="this.style.transform='scale(1.12)'"
         onmouseout="this.style.transform='scale(1)'"
     >
         <span class="material-symbols-rounded"
-            style="font-size:30px; color:#148F46;">
+            style="font-size:30px; color:#0C6F34;">
             table
         </span>
 
