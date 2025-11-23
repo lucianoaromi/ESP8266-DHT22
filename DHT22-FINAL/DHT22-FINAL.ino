@@ -1,5 +1,4 @@
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <WiFiClientSecure.h>
 #include <DHT.h>
 #include <time.h>
@@ -20,13 +19,19 @@ DHT dht(SENSOR, DHTTYPE);
 
 // Variables globales
 float TEMPERATURA = 0;
-float HUMEDAD = 0;
+float HUMEDAD     = 0;
 
 float tempMax = -100, tempMin = 200;
 float humMax  = 0,    humMin  = 100;
 
-unsigned long lastRead        = 0;
-unsigned long lastClientCheck = 0;
+unsigned long lastRead = 0;
+
+// =============================
+// INTERVALOS DE TIEMPO
+// =============================
+const unsigned long READ_INTERVAL_MS      = 5000UL;   // 5 segundos
+const unsigned long HIST_MINUTE_INTERVAL  = 60000UL;  // 1 minuto
+const unsigned long CSV_SAVE_INTERVAL_MS  = 300000UL; // 5 minutos
 
 // =============================
 // HISTORIAL 1 HORA (60 puntos)
@@ -34,18 +39,16 @@ unsigned long lastClientCheck = 0;
 const int HOUR_POINTS = 60;
 float histTemp[HOUR_POINTS];
 float histHum[HOUR_POINTS];
-int   histCount      = 0;  // cantidad de muestras válidas
-int   histIndex      = 0;  // índice circular
-unsigned long lastHistSample = 0; // para sampleo cada 60s
+int   histCount = 0;  // cantidad de muestras válidas
+int   histIndex = 0;  // índice circular
 
 unsigned long lastHistMinute = 0;   // para el gráfico (1 minuto)
 unsigned long lastCsvSave    = 0;   // para el archivo CSV (5 minutos)
 
-
 // =============================
 // TELEGRAM CONFIG
 // =============================
-const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";  // 
+const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
 const String CHAT_ID        = "5144677839";
 
 const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
@@ -54,13 +57,11 @@ const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
 
 WiFiServer server(80);
 
-
-
 // =============================
 // LOG EN SPIFFS (HASTA ~1 MES)
 // =============================
 const char* LOG_FILE = "/historial.csv";
-const unsigned long MAX_LOG_LINES = 8640UL; // 24 × 60 / 5 * 30 (1 por 5 minuto, en 30 días aprox)
+const unsigned long MAX_LOG_LINES = 8640UL; // 24 × 60 / 5 * 30 (1 por 5 minutos, 30 días aprox)
 bool spiffsOk = false;
 unsigned long logLines = 0;
 
@@ -90,6 +91,7 @@ String urlEncode(const String &text) {
   String encoded = "";
   char c;
   char buf[4];
+
   for (int i = 0; i < text.length(); i++) {
     c = text.charAt(i);
     if ( ('a' <= c && c <= 'z') ||
@@ -107,14 +109,12 @@ String urlEncode(const String &text) {
 // =============================
 // ENVIAR MENSAJE TELEGRAM
 // =============================
-
-
 void enviarTelegram(const String &mensaje) {
   WiFiClientSecure client;
 
   client.setInsecure();
   client.setTimeout(5000);
-  client.setBufferSizes(512, 512);  // ← MUY IMPORTANTE EN ESP8266
+  client.setBufferSizes(512, 512);  // Ajuste importante en ESP8266
 
   Serial.println("📡 Conectando a Telegram...");
 
@@ -138,7 +138,7 @@ void enviarTelegram(const String &mensaje) {
 
   Serial.println("📨 Enviando mensaje a Telegram...");
 
-  // Leer solo la primer línea de respuesta
+  // Leer solo la primera línea de respuesta
   String line = client.readStringUntil('\n');
   if (line.startsWith("HTTP/1.1 200")) {
     Serial.println("✅ Telegram enviado correctamente");
@@ -149,13 +149,9 @@ void enviarTelegram(const String &mensaje) {
   client.stop();
 }
 
-
-
-
 // =============================
 // LECTURA DEL DHT22
 // =============================
-
 bool leerDHT() {
   float sumaT = 0, sumaH = 0;
   int muestras = 5, validas = 0;
@@ -177,12 +173,12 @@ bool leerDHT() {
   TEMPERATURA = sumaT / validas;
   HUMEDAD     = sumaH / validas;
 
-  // === CORRECCIÓN DE HUMEDAD ======================
-  HUMEDAD = HUMEDAD - 9.0;  
+  // Corrección de sensores
+  HUMEDAD     = HUMEDAD - 9.0;
   TEMPERATURA = TEMPERATURA - 0.8;
 
   // Limitar valores
-  if (HUMEDAD < 0) HUMEDAD = 0;
+  if (HUMEDAD < 0)   HUMEDAD = 0;
   if (HUMEDAD > 100) HUMEDAD = 100;
 
   if (TEMPERATURA > tempMax) tempMax = TEMPERATURA;
@@ -218,6 +214,7 @@ void iniciarLog() {
 
   bool first = true;
   logLines = 0;
+
   while (f.available()) {
     String line = f.readStringUntil('\n');
     if (first) {          // saltar cabecera
@@ -226,6 +223,7 @@ void iniciarLog() {
     }
     if (line.length() > 1) logLines++;
   }
+
   f.close();
   Serial.printf("Log existente con %lu lineas.\n", logLines);
 }
@@ -260,13 +258,13 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
 }
 
 // =============================
-// GUARDAR MUESTRA EN HISTORIAL (cada minuto)
+// GUARDAR MUESTRA EN HISTORIAL
 // =============================
 void actualizarHistorial() {
   unsigned long ahora = millis();
 
-  // === ACTUALIZAR HISTORIAL EN RAM (GRÁFICO 1 HORA) CADA 1 MINUTO ===
-  if (ahora - lastHistMinute >= 60000) {
+  // Historial en RAM (gráfico 1 hora) → cada 1 minuto
+  if (ahora - lastHistMinute >= HIST_MINUTE_INTERVAL) {
     lastHistMinute = ahora;
 
     histTemp[histIndex] = TEMPERATURA;
@@ -276,21 +274,17 @@ void actualizarHistorial() {
     if (histCount < HOUR_POINTS) histCount++;
   }
 
-  // === GUARDAR EN ARCHIVO CSV CADA 5 MINUTOS ===
-  if (ahora - lastCsvSave >= 300000) {
+  // Guardar CSV → cada 5 minutos
+  if (ahora - lastCsvSave >= CSV_SAVE_INTERVAL_MS) {
     lastCsvSave = ahora;
-
     String fecha = obtenerFechaHora();
     agregarRegistroLog(fecha, TEMPERATURA, HUMEDAD);
   }
 }
 
-
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
 // ==========================================================
-
-// ---- Edad lunar (días desde la última luna nueva) ----
 double edadLunar() {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
@@ -319,7 +313,6 @@ double edadLunar() {
   return age;
 }
 
-// ---- Fecha futura sumando días ----
 String fechaFutura(double dias) {
   time_t now = time(nullptr);
   now += (long)(dias * 86400);
@@ -327,14 +320,16 @@ String fechaFutura(double dias) {
   struct tm* t = localtime(&now);
 
   char buf[20];
-  sprintf(buf, "%02d/%02d/%04d", t->tm_mday, t->tm_mon + 1, t->tm_year + 1900);
+  sprintf(buf, "%02d/%02d/%04d",
+          t->tm_mday,
+          t->tm_mon + 1,
+          t->tm_year + 1900);
 
   return String(buf);
 }
 
-// ---- Próximas luna nueva y luna llena ----
 void calcularLunas(String &proximaNueva, String &proximaLlena) {
-  double edad = edadLunar();
+  double edad  = edadLunar();
   double ciclo = 29.53058867;
 
   double dn = ciclo - edad;      // Días hasta próxima luna nueva
@@ -346,23 +341,21 @@ void calcularLunas(String &proximaNueva, String &proximaLlena) {
   proximaLlena = fechaFutura(dl);
 }
 
-// ---- Fase lunar en 0–7 ----
 int faseLunar() {
-  double age = edadLunar();
+  double age  = edadLunar();
   double frac = age / 29.53058867;
 
-  if (frac < 0.0625) return 0;  
-  if (frac < 0.1875) return 1;  
-  if (frac < 0.3125) return 2;  
-  if (frac < 0.4375) return 3;  
-  if (frac < 0.5625) return 4;  
-  if (frac < 0.6875) return 5;  
-  if (frac < 0.8125) return 6;  
-  if (frac < 0.9375) return 7;  
+  if (frac < 0.0625) return 0;
+  if (frac < 0.1875) return 1;
+  if (frac < 0.3125) return 2;
+  if (frac < 0.4375) return 3;
+  if (frac < 0.5625) return 4;
+  if (frac < 0.6875) return 5;
+  if (frac < 0.8125) return 6;
+  if (frac < 0.9375) return 7;
   return 0;
 }
 
-// ---- Nombre de fase (hemisferio sur) ----
 String faseNombre(int f) {
   switch(f) {
     case 0: return "Luna nueva";
@@ -377,7 +370,6 @@ String faseNombre(int f) {
   return "Desconocida";
 }
 
-// ---- Iconos lunares (hemisferio sur) ----
 String faseIcono(int f) {
   switch(f) {
     case 0: return "🌑";
@@ -418,7 +410,6 @@ void setup() {
     histTemp[i] = NAN;
     histHum[i]  = NAN;
   }
-  lastHistSample = millis();
 
   // Montar SPIFFS
   if (SPIFFS.begin()) {
@@ -432,8 +423,8 @@ void setup() {
 
   server.begin();
 
-// Enviar primer mensaje a Telegram cuando todo ya está listo
-enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
+  // Enviar primer mensaje a Telegram cuando todo ya está listo
+  enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 }
 
 // =============================
@@ -443,7 +434,7 @@ void loop() {
   unsigned long ahora = millis();
 
   // Leer cada 5 segundos
-  if (ahora - lastRead > 5000) {
+  if (ahora - lastRead > READ_INTERVAL_MS) {
     lastRead = ahora;
 
     if (leerDHT()) {
@@ -455,11 +446,14 @@ void loop() {
       // Alerta por temperatura
       if (TEMPERATURA >= ALERTA_TEMP &&
           (lastAlert == 0 || (ahora - lastAlert > ALERT_INTERVAL))) {
+
         lastAlert = ahora;
+
         String alerta = "ALERTA: Temperatura alta!\n";
         alerta += "🌡 Temp: " + String(TEMPERATURA) + " °C\n";
         alerta += "💧 Hum: " + String(HUMEDAD) + " %\n";
         alerta += "🕒 " + obtenerFechaHora();
+
         enviarTelegram(alerta);
       }
     }
@@ -584,10 +578,39 @@ void loop() {
       size_t len = f.read(buf, sizeof(buf));
       client.write(buf, len);
     }
+
     f.close();
     client.stop();
     return;
   }
+
+  // ===== Endpoint CLEAR CSV /clearcsv =====
+  if (requestLine.indexOf("GET /clearcsv") >= 0) {
+
+      if (spiffsOk && SPIFFS.exists(LOG_FILE)) {
+          SPIFFS.remove(LOG_FILE);
+      }
+
+      // Crear archivo vacío nuevamente
+      File nf = SPIFFS.open(LOG_FILE, "w");
+      if (nf) {
+          nf.println("FechaHora,Temperatura,Hum.edad");
+          nf.close();
+      }
+
+      logLines = 0;
+
+      Serial.println("🗑️ Historial CSV borrado manualmente.");
+
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: text/plain");
+      client.println("Connection: close");
+      client.println();
+      client.println("CSV borrado correctamente");
+      client.stop();
+      return;
+  }
+
 
   // ===== Página principal (HTML) =====
   client.println("HTTP/1.1 200 OK");
@@ -773,56 +796,80 @@ void loop() {
     Monitor Ambiental ESP8266/DHT22
 </h1>
 
+<!-- ============================================================================================= -->
 
+<div id="topButtons"
+     style="
+        position: absolute;
+        top: 25px;
+        right: 40px;
+        display: flex;
+        gap: 15px;
+        z-index: 30;
+     ">
 
-
-<button id="btnCSV"
-        style="
-            position: absolute;
-            top: 25px;
-            right: 40px;
-            width: 75px;
-            height: 75px;
-            border-radius: 50%;              /* ← REDONDO */
-            background: rgba(255,255,255,0.06);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.18);
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;          /* ← ICONO ARRIBA, TEXTO ABAJO */
-            align-items: center;
-            justify-content: center;
-            gap: 2px;
-            box-shadow:
-                0 4px 14px rgba(0,0,0,0.45),
-                inset 0 0 12px rgba(255,255,255,0.08);
-            transition: 0.25s ease;
-            z-index: 30;
-        "
-        onmouseover="this.style.transform='scale(1.12)'"
-        onmouseout="this.style.transform='scale(1)'"
+    <!-- BOTÓN CLEAR -->
+    <button id="btnClear"
+            style="
+                width: 75px;
+                height: 75px;
+                border-radius: 50%;
+                background: rgba(255,80,80,0.13);
+                border: 1px solid rgba(255,80,80,0.25);
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 2px;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.45),
+                            inset 0 0 12px rgba(255,80,80,0.15);
+                transition: 0.25s ease;
+            "
+            onmouseover="this.style.transform='scale(1.12)'"
+            onmouseout="this.style.transform='scale(1)'"
     >
+        <span class="material-symbols-rounded" style="font-size:30px; color:#ff5757;">
+            delete
+        </span>
+        <span style="font-size:10px; color:#e5e5e5;">CLEAR</span>
+    </button>
 
-    <!-- ICONO -->
-    <span class="material-symbols-rounded" style="font-size:30px; color:#4CAF50;">
-        table
-    </span>
+    <!-- BOTÓN CSV -->
+    <button id="btnCSV"
+            style="
+                width: 75px;
+                height: 75px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.06);
+                backdrop-filter: blur(8px);
+                border: 1px solid rgba(255,255,255,0.18);
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 2px;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.45),
+                            inset 0 0 12px rgba(255,255,255,0.08);
+                transition: 0.25s ease;
+            "
+            onmouseover="this.style.transform='scale(1.12)'"
+            onmouseout="this.style.transform='scale(1)'"
+    >
+        <span class="material-symbols-rounded" style="font-size:30px; color:#4CAF50;">
+            table
+        </span>
+        <span style="font-size:10px; color:#e5e5e5;">.CSV</span>
+    </button>
 
-    <!-- TEXTO -->
-    <span style="font-size:10px; color:#e5e5e5;">
-        .CSV
-    </span>
+</div>
 
-</button>
-
-
-
-
-
+<!-- ============================================================================================= -->
 
   <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
-<div class="panel"
-     style="
+  <div class="panel"
+       style="
         position:relative;
         display:flex;
         gap:20px;
@@ -832,9 +879,6 @@ void loop() {
         max-width:650px;
         margin:20px auto;
      ">
-    </button>
-
-
 
     <!-- ==================== SECCIÓN CLIMA ==================== -->
     <div style="flex:1; min-width:260px; padding-right:10px;">
@@ -912,8 +956,6 @@ void loop() {
 
   </div>
 
-  <!-- Botón para descargar CSV completo (1 mes aprox) -->
-
   <!-- ===========================
        GRÁFICOS
        =========================== -->
@@ -962,7 +1004,6 @@ function smoothEWMA(values, alpha = 0.2) {
 
     return smoothed;
 }
-
 
 function crearGraficos() {
 
@@ -1125,20 +1166,19 @@ function actualizarDatos(){
             document.getElementById('hmax').textContent = d.hmax.toFixed(1);
             document.getElementById('time').textContent = d.time;
 
-            document.getElementById("moonIcon").textContent = d.moonIcon;
-            document.getElementById("moonName").textContent = d.moonName;
-            document.getElementById("nextNewMoon").textContent = d.nextNewMoon;
-            document.getElementById("nextFullMoon").textContent = d.nextFullMoon;
+            document.getElementById("moonIcon").textContent      = d.moonIcon;
+            document.getElementById("moonName").textContent      = d.moonName;
+            document.getElementById("nextNewMoon").textContent   = d.nextNewMoon;
+            document.getElementById("nextFullMoon").textContent  = d.nextFullMoon;
 
             bufferTemp.push(d.temp);
             bufferHum.push(d.hum);
 
             if(bufferTemp.length > 50) bufferTemp.shift();
-            if(bufferHum.length > 50) bufferHum.shift();
+            if(bufferHum.length > 50)  bufferHum.shift();
 
             const tempSmoothed = smoothEWMA(bufferTemp, 0.2);
             const humSmoothed  = smoothEWMA(bufferHum, 0.2);
-
 
             agregarPunto(tempChart, d.time, tempSmoothed, 40);
             agregarPunto(humChart , d.time, humSmoothed, 40);
@@ -1188,6 +1228,15 @@ window.onload = function(){
         window.location.href = "/csv";
     });
 };
+
+document.getElementById("btnCLEAR").addEventListener("click", function(){
+    if (confirm("¿Seguro que deseas borrar TODO el historial del CSV?")) {
+        fetch("/clearcsv")
+            .then(()=> alert("Historial CSV borrado correctamente."))
+            .catch(()=> alert("Error al borrar el CSV."));
+    }
+});
+
 </script>
 
 </body>
