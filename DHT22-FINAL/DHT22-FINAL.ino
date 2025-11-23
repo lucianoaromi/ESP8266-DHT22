@@ -908,12 +908,20 @@ const HOUR_POINTS = 60;
 let bufferTemp = [];
 let bufferHum  = [];
 
-function smooth(values, windowSize = 5) {
-    if (values.length < windowSize) return values[values.length - 1];
-    let sum = 0;
-    for (let i = values.length - windowSize; i < values.length; i++) sum += values[i];
-    return sum / windowSize;
+function smoothEWMA(values, alpha = 0.2) {
+    if (values.length < 2) return values[values.length - 1];
+
+    let prev = values[0];
+    let smoothed = prev;
+
+    for (let i = 1; i < values.length; i++) {
+        smoothed = alpha * values[i] + (1 - alpha) * prev;
+        prev = smoothed;
+    }
+
+    return smoothed;
 }
+
 
 function crearGraficos() {
 
@@ -1087,8 +1095,9 @@ function actualizarDatos(){
             if(bufferTemp.length > 50) bufferTemp.shift();
             if(bufferHum.length > 50) bufferHum.shift();
 
-            const tempSmoothed = smooth(bufferTemp);
-            const humSmoothed = smooth(bufferHum);
+            const tempSmoothed = smoothEWMA(bufferTemp, 0.2);
+            const humSmoothed  = smoothEWMA(bufferHum, 0.2);
+
 
             agregarPunto(tempChart, d.time, tempSmoothed, 40);
             agregarPunto(humChart , d.time, humSmoothed, 40);
