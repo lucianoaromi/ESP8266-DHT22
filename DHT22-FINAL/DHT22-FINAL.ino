@@ -786,24 +786,22 @@ void loop() {
         color: #EEE;
     }
 
-/* Botones responsive */
-#btnCSV, #btnClear {
-    width: clamp(55px, 8vw, 85px);
-    height: clamp(55px, 8vw, 85px);
-    border-radius: 50%;
-}
+    /* Botones responsive */
+    #btnCSV, #btnClear {
+        width: clamp(55px, 8vw, 85px);
+        height: clamp(55px, 8vw, 85px);
+        border-radius: 50%;
+    }
 
-#btnCSV span.material-symbols-rounded,
-#btnClear span.material-symbols-rounded {
-    font-size: clamp(22px, 4vw, 34px);
-}
+    #btnCSV span.material-symbols-rounded,
+    #btnClear span.material-symbols-rounded {
+        font-size: clamp(22px, 4vw, 34px);
+    }
 
-#btnCSV span,
-#btnClear span {
-    font-size: clamp(8px, 2vw, 12px);
-}
-
-
+    #btnCSV span,
+    #btnClear span {
+        font-size: clamp(8px, 2vw, 12px);
+    }
 
   </style>
 </head>
@@ -833,9 +831,9 @@ void loop() {
             width:57px;
             height:57px;
             border-radius:50%;
-            background: radial-gradient(circle, rgba(255,0,0,0.15), rgba(100,0,0,0.35));
+            background: radial-gradient(circle, rgba(90,0,0,0.15), rgba(40,0,0,0.35));
             backdrop-filter: blur(6px);
-            border:1px solid rgba(255,0,0,0.28);
+            border:1px solid rgba(160,0,0,0.45);
             cursor:pointer;
             display:flex;
             flex-direction:column;
@@ -851,7 +849,7 @@ void loop() {
         onmouseout="this.style.transform='scale(1)'"
     >
         <span class="material-symbols-rounded"
-            style="font-size:30px; color:#FF4D4D;">
+            style="font-size:30px; color:#B73737;">
             delete
         </span>
         <span style="font-size:9px; color:#ffecec;">CLEAR</span>
@@ -864,9 +862,9 @@ void loop() {
             width:57px;
             height:57px;
             border-radius:50%;
-            background: radial-gradient(circle, rgba(0,255,0,0.11), rgba(0,80,0,0.35));
+            background: radial-gradient(circle, rgba(0,90,0,0.15), rgba(0,40,0,0.35));
             backdrop-filter: blur(6px);
-            border:1px solid rgba(0,255,0,0.28);
+            border:1px solid rgba(0,120,0,0.35);
             cursor:pointer;
             display:flex;
             flex-direction:column;
@@ -882,7 +880,7 @@ void loop() {
         onmouseout="this.style.transform='scale(1)'"
     >
         <span class="material-symbols-rounded"
-            style="font-size:30px; color:#4CAF50;">
+            style="font-size:30px; color:#148F46;">
             table
         </span>
 
@@ -1010,27 +1008,27 @@ void loop() {
 
   <div class="footer">by: Luciano Aromi</div>
 
-<script>
-let tempChart, humChart;
-let tempHourChart, humHourChart;
+  <script>
+  let tempChart, humChart;
+  let tempHourChart, humHourChart;
 
-const HOUR_POINTS = 60;
-let bufferTemp = [];
-let bufferHum  = [];
+  const HOUR_POINTS = 60;
+  let bufferTemp = [];
+  let bufferHum  = [];
 
-function smoothEWMA(values, alpha = 0.2) {
-    if (values.length < 2) return values[values.length - 1];
+  function smoothEWMA(values, alpha = 0.2) {
+      if (values.length < 2) return values[values.length - 1];
 
-    let prev = values[0];
-    let smoothed = prev;
+      let prev = values[0];
+      let smoothed = prev;
 
-    for (let i = 1; i < values.length; i++) {
-        smoothed = alpha * values[i] + (1 - alpha) * prev;
-        prev = smoothed;
-    }
+      for (let i = 1; i < values.length; i++) {
+          smoothed = alpha * values[i] + (1 - alpha) * prev;
+          prev = smoothed;
+      }
 
-    return smoothed;
-}
+      return smoothed;
+  }
 
 function crearGraficos() {
 
@@ -1256,7 +1254,7 @@ window.onload = function(){
     });
 };
 
-document.getElementById("btnCLEAR").addEventListener("click", function(){
+document.getElementById("btnClear").addEventListener("click", function(){
     if (confirm("¿Seguro que deseas borrar TODO el historial del CSV?")) {
         fetch("/clearcsv")
             .then(()=> alert("Historial CSV borrado correctamente."))
