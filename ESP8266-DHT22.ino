@@ -427,6 +427,84 @@ void setup() {
   enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 }
 
+
+
+
+
+
+
+
+
+
+// ==========================================================
+//      OBTENER FECHA INICIAL Y FINAL DEL CSV EXISTENTE
+// ==========================================================
+String obtenerNombreCSV() {
+  if (!SPIFFS.exists(LOG_FILE)) return "historial_vacio.csv";
+
+  File f = SPIFFS.open(LOG_FILE, "r");
+  if (!f) return "historial_error.csv";
+
+  String linea;
+  String primeraFecha = "";
+  String ultimaFecha  = "";
+
+  bool esCabecera = true;
+
+  while (f.available()) {
+    linea = f.readStringUntil('\n');
+
+    // saltar cabecera
+    if (esCabecera) {
+      esCabecera = false;
+      continue;
+    }
+
+    // línea con contenido real
+    if (linea.length() > 5) {
+
+      // tomar primera fecha válida
+      if (primeraFecha == "") {
+        primeraFecha = linea.substring(0, 10);  // dd/mm/yyyy
+      }
+
+      // actualizar última fecha cada vez
+      ultimaFecha = linea.substring(0, 10);
+    }
+  }
+
+  f.close();
+
+  if (primeraFecha == "" || ultimaFecha == "")
+    return "historial_sin_datos.csv";
+
+  // Convertir dd/mm/yyyy → yyyymmdd
+  auto normalizar = [](String f) {
+    String d = f.substring(0,2);
+    String m = f.substring(3,5);
+    String y = f.substring(6,10);
+    return y + m + d;
+  };
+
+  String f1 = normalizar(primeraFecha);
+  String f2 = normalizar(ultimaFecha);
+
+  return "historial_" + f1 + "_" + f2 + ".csv";
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // =============================
 // LOOP PRINCIPAL
 // =============================
@@ -569,7 +647,7 @@ void loop() {
 
     client.println("HTTP/1.1 200 OK");
     client.println("Content-Type: text/csv");
-    client.println("Content-Disposition: attachment; filename=\"historial_dht22.csv\"");
+    client.println("Content-Disposition: attachment; filename=\"" + obtenerNombreCSV() + "\"");
     client.println("Connection: close");
     client.println();
 
