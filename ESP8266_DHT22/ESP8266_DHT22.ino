@@ -1040,6 +1040,74 @@ void loop() {
             padding-left: 6px;
         }
 
+        @media (max-width: 600px) {
+            body {
+                padding: 18px 12px;
+            }
+
+            .panel {
+                display: block;
+                min-width: 0;
+            }
+
+            .panel.header-panel {
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-width: 0;
+                width: clamp(200px, 72vw, 280px);
+                margin: 0 auto 14px auto;
+                padding: 15px 16px 13px 16px;
+                gap: 11px;
+                text-align: center;
+            }
+
+            .header-info {
+                justify-content: center;
+            }
+
+            .header-update {
+                align-items: center;
+            }
+
+            .panel-main {
+                flex-direction: column;
+                align-items: stretch;
+                min-width: 0;
+                width: clamp(240px, 88vw, 340px);
+                margin: 15px auto;
+                padding: 18px;
+                gap: 16px;
+                box-sizing: border-box;
+            }
+
+            .climate-section,
+            .lunar-section {
+                min-width: 0;
+                width: 100%;
+                padding: 0;
+            }
+
+            .climate-section {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+                padding-bottom: 12px;
+                margin-bottom: 6px;
+            }
+
+            .lunar-section {
+                text-align: center;
+            }
+
+            .lunar-header {
+                justify-content: center;
+            }
+
+            .lunar-row {
+                justify-content: center;
+                gap: 10px;
+            }
+        }
+
         .panel-csv {
             max-width: 220px;
             width: clamp(180px, 52%, 220px);
