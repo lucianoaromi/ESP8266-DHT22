@@ -732,7 +732,6 @@ void loop() {
 <!-- ============================================================================================= -->
 
 
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -946,6 +945,14 @@ void loop() {
             font-size: clamp(5.5px, 1.4vw, 8px);
         }
 
+        @media (max-width: 480px) {
+            #btnCSV,
+            #btnClear {
+                width: clamp(48px, 6.2vw, 64px);
+                height: clamp(48px, 6.2vw, 64px);
+            }
+        }
+
         .heading-main {
             color: #A05C1F;
             font-size: 22px;
@@ -990,11 +997,26 @@ void loop() {
 
         .csv-row {
             margin-bottom: 6px;
-            font-size: 15px;
+            font-size: 16px;
+            color: #adb1bc;
         }
 
         .csv-row-large {
             margin-bottom: 12px;
+        }
+
+        .csv-row strong {
+            font-weight: 400;
+            color: #a5a9b3;
+        }
+
+        .csv-row span {
+            color: #9aa0ad;
+        }
+
+        .csv-row span.value-bold {
+            font-weight: 600;
+            color: #c3c7d2;
         }
 
         .csv-actions {
@@ -1017,34 +1039,34 @@ void loop() {
             transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
             -webkit-backdrop-filter: blur(6px);
             backdrop-filter: blur(6px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            background: linear-gradient(160deg, rgba(28, 32, 48, 0.92), rgba(16, 18, 32, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.015);
+            background: linear-gradient(160deg, rgba(8, 9, 14, 0.95), rgba(3, 4, 8, 0.95));
             box-shadow:
-                inset 0 2px 6px rgba(255, 255, 255, 0.04),
-                0 12px 20px rgba(0, 0, 0, 0.35);
+                inset 0 2px 6px rgba(255, 255, 255, 0.015),
+                0 6px 12px rgba(0, 0, 0, 0.26);
         }
 
         .circular-btn:hover {
-            transform: translateY(-2px);
+            transform: translateY(-1px);
             box-shadow:
-                inset 0 2px 6px rgba(255, 255, 255, 0.06),
-                0 16px 26px rgba(0, 0, 0, 0.45);
+                inset 0 2px 6px rgba(255, 255, 255, 0.03),
+                0 10px 18px rgba(0, 0, 0, 0.32);
         }
 
         .btn-clear {
-            border-color: rgba(255, 102, 120, 0.4);
-            background: linear-gradient(155deg, rgba(58, 24, 32, 0.9), rgba(32, 12, 18, 0.9));
+            border-color: rgba(190, 90, 102, 0.14);
+            background: linear-gradient(155deg, rgba(28, 10, 16, 0.92), rgba(16, 5, 10, 0.92));
             box-shadow:
-                inset 0 0 0 1px rgba(255, 110, 128, 0.18),
-                0 10px 18px rgba(255, 90, 112, 0.14);
+                inset 0 0 0 1px rgba(190, 102, 118, 0.08),
+                0 5px 10px rgba(160, 60, 76, 0.08);
         }
 
         .btn-csv {
-            border-color: rgba(92, 190, 145, 0.4);
-            background: linear-gradient(155deg, rgba(28, 46, 39, 0.9), rgba(18, 30, 26, 0.9));
+            border-color: rgba(96, 164, 132, 0.14);
+            background: linear-gradient(155deg, rgba(12, 24, 19, 0.92), rgba(6, 12, 10, 0.92));
             box-shadow:
-                inset 0 0 0 1px rgba(110, 210, 165, 0.18),
-                0 10px 18px rgba(76, 182, 142, 0.14);
+                inset 0 0 0 1px rgba(110, 182, 148, 0.08),
+                0 5px 10px rgba(60, 120, 94, 0.08);
         }
 
         .btn-icon {
@@ -1057,19 +1079,19 @@ void loop() {
         }
 
         #btnClear .btn-icon {
-            color: #ff7b8c;
+            color: rgba(150, 92, 104, 0.85);
         }
 
         #btnClear .btn-label {
-            color: rgba(255, 187, 196, 0.88);
+            color: rgba(162, 124, 132, 0.68);
         }
 
         #btnCSV .btn-icon {
-            color: #75e0aa;
+            color: rgba(78, 128, 104, 0.85);
         }
 
         #btnCSV .btn-label {
-            color: rgba(167, 240, 198, 0.88);
+            color: rgba(120, 164, 144, 0.68);
         }
     </style>
 </head>
@@ -1476,12 +1498,12 @@ void loop() {
 
         <div class="csv-row">
             <strong>Primer registro:</strong>
-            <span id="csvFirst">--/--/----</span>
+            <span id="csvFirst" class="value-bold">--/--/----</span>
         </div>
 
         <div class="csv-row csv-row-large">
             <strong>Último registro:</strong>
-            <span id="csvLast">--/--/----</span>
+            <span id="csvLast" class="value-bold">--/--/----</span>
         </div>
 
         <div class="csv-actions">
@@ -1516,7 +1538,6 @@ void loop() {
     </script>
 </body>
 </html>
-
 
 
 <!-- ============================================================================================= -->
