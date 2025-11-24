@@ -982,41 +982,43 @@ void loop() {
         }
 
         .panel-csv {
-            max-width: 330px;
-            margin: 25px auto;
+            max-width: 260px;
+            width: clamp(200px, 60%, 260px);
+            min-width: 0;
+            margin: 22px auto;
             background: #11131d;
             text-align: center;
-            padding: 18px 24px;
+            padding: 14px 18px;
         }
 
         .csv-title {
             text-align: center;
-            margin-bottom: 12px;
-            font-size: 20px;
+            margin-bottom: 10px;
+            font-size: 18px;
         }
 
         .csv-row {
-            margin-bottom: 6px;
-            font-size: 16px;
+            margin-bottom: 5px;
+            font-size: 14px;
             color: #adb1bc;
         }
 
         .csv-row-large {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         .csv-row strong {
             font-weight: 400;
-            color: #a5a9b3;
+            color: #a1a5af;
         }
 
         .csv-row span {
-            color: #9aa0ad;
+            color: #9096a4;
         }
 
         .csv-row span.value-bold {
             font-weight: 600;
-            color: #c3c7d2;
+            color: #b9bec9;
         }
 
         .csv-actions {
