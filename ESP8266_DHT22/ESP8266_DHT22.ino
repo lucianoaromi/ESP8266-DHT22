@@ -736,732 +736,776 @@ void loop() {
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitor Ambiental ESP8266/DHT22</title>
+    <title>Monitor Ambiental ESP8266/DHT22</title>
 
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        body{
-            background:#0d0f1a;
-            color:#e0e0e0;
-            font-family:Segoe UI, sans-serif;
-            text-align:center;
-            padding:25px;
-        }
-        h1{margin-bottom:5px;}
-        h2{margin-top:0;color:#aaa;}
-
-        .panel{
-            margin:20px auto;
-            display:inline-block;
-            text-align:left;
-            padding:25px 35px;
-            border-radius:16px;
-            background:#1b1d2b;
-            box-shadow:0 0 18px rgba(0,0,0,0.7);
-            min-width:300px;
+        body {
+            background: #0d0f1a;
+            color: #e0e0e0;
+            font-family: Segoe UI, sans-serif;
+            text-align: center;
+            padding: 25px;
         }
 
-        .section-title{
-            font-size:20px;
-            margin-bottom:10px;
-            display:flex;
-            align-items:center;
-            gap:8px;
-            font-weight:bold;
+        h1 {
+            margin-bottom: 5px;
         }
 
-        .icon{
+        h2 {
+            margin-top: 0;
+            color: #aaa;
+        }
+
+        .panel {
+            margin: 20px auto;
+            display: inline-block;
+            text-align: left;
+            padding: 25px 35px;
+            border-radius: 16px;
+            background: #1b1d2b;
+            box-shadow: 0 0 18px rgba(0, 0, 0, 0.7);
+            min-width: 300px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+        }
+
+        .icon {
             font-family: 'Material Symbols Rounded';
-            font-size:28px;
-            vertical-align:middle;
+            font-size: 28px;
+            vertical-align: middle;
         }
 
-        #temp{ color:#FFD700; }
-        #hum{  color:#00B4FF; }
-
-        .icon-temp { color:#FFC107; }
-        .icon-hum  { color:#03A9F4; }
-        .icon-time { color:#4CAF50; }
-
-        .label{margin:8px 0;font-size:17px;}
-        .value{font-size:19px;font-weight:bold;}
-
-        .charts{
-            max-width:1000px;
-            margin:20px auto;
-            display:flex;
-            flex-wrap:wrap;
-            justify-content:space-around;
-            gap:20px;
+        #temp {
+            color: #FFD700;
         }
 
-        canvas{
-            background:#141622;
-            border-radius:10px;
-            padding:12px;
+        #hum {
+            color: #00B4FF;
         }
 
-        .footer{
-            margin-top:25px;
-            font-size:16px;
-            font-family:Georgia, serif;
-            color:#DAA5;
-            font-style:italic;
-            text-shadow:0 0 3px rgba(255, 215, 0, 0.25);
+        .icon-temp {
+            color: #FFC107;
         }
 
-        .chart-block{
-            flex:1;
-            min-width:280px;
+        .icon-hum {
+            color: #03A9F4;
+        }
+
+        .icon-time {
+            color: #4CAF50;
+        }
+
+        .label {
+            margin: 8px 0;
+            font-size: 17px;
+        }
+
+        .value {
+            font-size: 19px;
+            font-weight: bold;
+        }
+
+        .charts {
+            max-width: 1000px;
+            margin: 20px auto;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            gap: 20px;
+        }
+
+        canvas {
+            background: #141622;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .footer {
+            margin-top: 25px;
+            font-size: 16px;
+            font-family: Georgia, serif;
+            color: #DAA5;
+            font-style: italic;
+            text-shadow: 0 0 3px rgba(255, 215, 0, 0.25);
+        }
+
+        .chart-block {
+            flex: 1;
+            min-width: 280px;
         }
 
         /* ======== Estilo iPhone Lunar Card ======== */
         .lunar-ios {
-                background: rgba(255,255,255,0.04);
-                padding: 28px;
-                border-radius: 22px;
-                box-shadow:
-                        inset 0 0 12px rgba(255,255,255,0.05),
-                        0 8px 22px rgba(0,0,0,0.35);
-                -webkit-backdrop-filter: blur(10px);
-                backdrop-filter: blur(10px);
-                transition: 0.25s;
-                min-width: 320px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 28px;
+            border-radius: 22px;
+            box-shadow:
+                inset 0 0 12px rgba(255, 255, 255, 0.05),
+                0 8px 22px rgba(0, 0, 0, 0.35);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            transition: 0.25s;
+            min-width: 320px;
         }
 
         .lunar-ios:hover {
-                transform: scale(1.02);
-                box-shadow:
-                        inset 0 0 16px rgba(255,255,255,0.07),
-                        0 12px 30px rgba(0,0,0,0.45);
+            transform: scale(1.02);
+            box-shadow:
+                inset 0 0 16px rgba(255, 255, 255, 0.07),
+                0 12px 30px rgba(0, 0, 0, 0.45);
         }
 
         .lunar-header {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
         }
 
         .lunar-icon-title {
-                font-family: 'Material Symbols Rounded';
-                font-size: 28px;
-                color: #C8C9CC;
+            font-family: 'Material Symbols Rounded';
+            font-size: 28px;
+            color: #C8C9CC;
         }
 
         .lunar-title {
-                font-size: 22px;
-                font-weight: 600;
-                color: #EEE;
+            font-size: 22px;
+            font-weight: 600;
+            color: #EEE;
         }
 
         .lunar-moon-icon {
-                display: flex;
-                justify-content: center;
-                margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
         }
 
         .moon-emoji {
-                font-size: 60px;
-                filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+            font-size: 60px;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
         }
 
         .lunar-phase-name {
-                text-align: center;
-                font-size: 20px;
-                font-weight: 600;
-                color: #DCDCDC;
-                margin-bottom: 15px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 600;
+            color: #DCDCDC;
+            margin-bottom: 15px;
         }
 
         .divider {
-                width: 100%;
-                height: 1px;
-                background: rgba(255,255,255,0.10);
-                margin: 12px 0 18px 0;
+            width: 100%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.10);
+            margin: 12px 0 18px 0;
         }
 
         .lunar-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 4px 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
         }
 
         .label-ios {
-                font-size: 16px;
-                color: #B7B7B7;
+            font-size: 16px;
+            color: #B7B7B7;
         }
 
         .value-ios {
-                font-size: 17px;
-                font-weight: 600;
-                color: #EEE;
+            font-size: 17px;
+            font-weight: 600;
+            color: #EEE;
         }
 
         /* Botones responsive */
-        #btnCSV, #btnClear {
-                width: clamp(55px, 8vw, 85px);
-                height: clamp(55px, 8vw, 85px);
-                border-radius: 50%;
+        #btnCSV,
+        #btnClear {
+            width: clamp(55px, 8vw, 85px);
+            height: clamp(55px, 8vw, 85px);
+            border-radius: 50%;
         }
 
         #btnCSV span.material-symbols-rounded,
         #btnClear span.material-symbols-rounded {
-                font-size: clamp(22px, 4vw, 34px);
+            font-size: clamp(22px, 4vw, 34px);
         }
 
         #btnCSV .btn-label,
         #btnClear .btn-label {
-                font-size: clamp(8px, 2vw, 12px);
+            font-size: clamp(8px, 2vw, 12px);
         }
 
-        .heading-main{
-            color:#A05C1F;
-            font-size:22px;
+        .heading-main {
+            color: #A05C1F;
+            font-size: 22px;
         }
 
-        .panel-main{
-            position:relative;
-            display:flex;
-            gap:20px;
-            align-items:flex-start;
-            padding:20px 25px;
-            width:100%;
-            max-width:650px;
-            margin:20px auto;
+        .panel-main {
+            position: relative;
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            padding: 20px 25px;
+            width: 100%;
+            max-width: 650px;
+            margin: 20px auto;
         }
 
-        .climate-section{
-            flex:1;
-            min-width:260px;
-            padding-right:10px;
+        .climate-section {
+            flex: 1;
+            min-width: 260px;
+            padding-right: 10px;
         }
 
-        .lunar-section{
-            flex:1;
-            min-width:240px;
-            padding-left:10px;
+        .lunar-section {
+            flex: 1;
+            min-width: 240px;
+            padding-left: 10px;
         }
 
-        .panel-csv{
-            max-width:450px;
-            margin:35px auto;
-            background:#11131d;
-            text-align:center;
+        .panel-csv {
+            max-width: 450px;
+            margin: 35px auto;
+            background: #11131d;
+            text-align: center;
         }
 
-        .csv-title{
-            text-align:center;
-            margin-bottom:15px;
+        .csv-title {
+            text-align: center;
+            margin-bottom: 15px;
         }
 
-        .csv-row{
-            margin-bottom:8px;
+        .csv-row {
+            margin-bottom: 8px;
         }
 
-        .csv-row-large{
-            margin-bottom:15px;
+        .csv-row-large {
+            margin-bottom: 15px;
         }
 
-        .csv-actions{
-            display:flex;
-            justify-content:center;
-            gap:25px;
-            margin-top:20px;
+        .csv-actions {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 20px;
         }
 
-        .circular-btn{
-            width:70px;
-            height:70px;
-            border-radius:50%;
-            cursor:pointer;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            gap:4px;
-            transition:0.25s ease;
-            -webkit-backdrop-filter:blur(6px);
-            backdrop-filter:blur(6px);
-            border:1px solid transparent;
+        .circular-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: 0.25s ease;
+            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px);
+            border: 1px solid transparent;
         }
 
-        .circular-btn:hover{
-            transform:scale(1.1);
+        .circular-btn:hover {
+            transform: scale(1.1);
         }
 
-        .btn-clear{
-            background:radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
-            border-color:rgba(120,0,0,0.55);
-            box-shadow:0 4px 14px rgba(0,0,0,0.50), inset 0 0 10px rgba(180,0,0,0.25);
+        .btn-clear {
+            background: radial-gradient(circle, rgba(60, 0, 0, 0.15), rgba(25, 0, 0, 0.42));
+            border-color: rgba(120, 0, 0, 0.55);
+            box-shadow:
+                0 4px 14px rgba(0, 0, 0, 0.50),
+                inset 0 0 10px rgba(180, 0, 0, 0.25);
         }
 
-        .btn-csv{
-            background:radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
-            border-color:rgba(0,100,0,0.55);
-            box-shadow:0 4px 14px rgba(0,0,0,0.50), inset 0 0 10px rgba(0,160,0,0.25);
+        .btn-csv {
+            background: radial-gradient(circle, rgba(0, 60, 0, 0.15), rgba(0, 25, 0, 0.42));
+            border-color: rgba(0, 100, 0, 0.55);
+            box-shadow:
+                0 4px 14px rgba(0, 0, 0, 0.50),
+                inset 0 0 10px rgba(0, 160, 0, 0.25);
         }
 
-        .btn-icon{
-            font-size:33px;
+        .btn-icon {
+            font-size: 33px;
         }
 
-        .btn-label{
-            font-size:9px;
+        .btn-label {
+            font-size: 9px;
         }
 
-        #btnClear .btn-icon{
-            color:#7A2626;
+        #btnClear .btn-icon {
+            color: #7A2626;
         }
 
-        #btnClear .btn-label{
-            color:#D45A5A;
+        #btnClear .btn-label {
+            color: #D45A5A;
         }
 
-        #btnCSV .btn-icon{
-            color:#0A3F1E;
+        #btnCSV .btn-icon {
+            color: #0A3F1E;
         }
 
-        #btnCSV .btn-label{
-            color:#47B676;
+        #btnCSV .btn-label {
+            color: #47B676;
         }
-
     </style>
 </head>
-
 <body>
+    <h1 class="heading-main">
+        Monitor Ambiental ESP8266/DHT22
+    </h1>
 
-<h1 class="heading-main">
-    Monitor Ambiental ESP8266/DHT22
-</h1>
-
-
-  <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
+    <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
     <div class="panel panel-main">
+        <!-- ==================== SECCIÓN CLIMA ==================== -->
+        <div class="climate-section">
+            <div class="section-title">
+                <span class="icon icon-temp">wb_sunny</span>
+                Temperatura
+            </div>
+            <div class="label">Actual: <span id="temp" class="value">--.-</span> °C</div>
 
-    <!-- ==================== SECCIÓN CLIMA ==================== -->
-    <div class="climate-section">
+            <hr>
 
-        <div class="section-title">
-            <span class="icon icon-temp">wb_sunny</span>
-            Temperatura
+            <div class="section-title">
+                <span class="icon icon-hum">water_drop</span>
+                Humedad
+            </div>
+            <div class="label">Actual: <span id="hum" class="value">--.-</span> %</div>
+
+            <hr>
+
+            <div class="label">
+                Temp Min/Max:
+                <span id="tmin" class="value">--.-</span> /
+                <span id="tmax" class="value">--.-</span> °C
+            </div>
+
+            <div class="label">
+                Hum Min/Max:
+                <span id="hmin" class="value">--.-</span> /
+                <span id="hmax" class="value">--.-</span> %
+            </div>
+
+            <hr>
+
+            <div class="section-title">
+                <span class="icon icon-time">schedule</span>
+                Última actualización
+            </div>
+
+            <div class="label">
+                <span id="time" class="value">--/--/---- --:--:--</span>
+            </div>
         </div>
-        <div class="label">Actual: <span id="temp" class="value">--.-</span> °C</div>
 
-        <hr>
+        <!-- ==================== SECCIÓN LUNAR ==================== -->
+        <div class="lunar-section">
+            <div class="lunar-header">
+                <span class="lunar-icon-title">nightlight</span>
+                <span class="lunar-title">Fase Lunar</span>
+            </div>
 
-        <div class="section-title">
-            <span class="icon icon-hum">water_drop</span>
-            Humedad
+            <div class="lunar-moon-icon">
+                <span id="moonIcon" class="moon-emoji">🌑</span>
+            </div>
+
+            <div class="lunar-phase-name">
+                <span id="moonName">--</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="lunar-row">
+                <span class="label-ios">Próxima Luna Nueva</span>
+                <span id="nextNewMoon" class="value-ios">--/--/----</span>
+            </div>
+
+            <div class="lunar-row">
+                <span class="label-ios">Próxima Luna Llena</span>
+                <span id="nextFullMoon" class="value-ios">--/--/----</span>
+            </div>
         </div>
-        <div class="label">Actual: <span id="hum" class="value">--.-</span> %</div>
-
-        <hr>
-
-        <div class="label">
-            Temp Min/Max:
-            <span id="tmin" class="value">--.-</span> /
-            <span id="tmax" class="value">--.-</span> °C
-        </div>
-
-        <div class="label">
-            Hum Min/Max:
-            <span id="hmin" class="value">--.-</span> /
-            <span id="hmax" class="value">--.-</span> %
-        </div>
-
-        <hr>
-
-        <div class="section-title">
-            <span class="icon icon-time">schedule</span>
-            Última actualización
-        </div>
-
-        <div class="label">
-            <span id="time" class="value">--/--/---- --:--:--</span>
-        </div>
-
     </div>
 
-    <!-- ==================== SECCIÓN LUNAR ==================== -->
-    <div class="lunar-section">
-
-        <div class="lunar-header">
-            <span class="lunar-icon-title">nightlight</span>
-            <span class="lunar-title">Fase Lunar</span>
+    <!-- ===========================
+             GRÁFICOS
+             =========================== -->
+    <div class="charts">
+        <div class="chart-block">
+            <h3>Temperatura (últimos segundos)</h3>
+            <canvas id="tempChart"></canvas>
         </div>
-
-        <div class="lunar-moon-icon">
-            <span id="moonIcon" class="moon-emoji">🌑</span>
+        <div class="chart-block">
+            <h3>Humedad (últimos segundos)</h3>
+            <canvas id="humChart"></canvas>
         </div>
-
-        <div class="lunar-phase-name">
-            <span id="moonName">--</span>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="lunar-row">
-            <span class="label-ios">Próxima Luna Nueva</span>
-            <span id="nextNewMoon" class="value-ios">--/--/----</span>
-        </div>
-
-        <div class="lunar-row">
-            <span class="label-ios">Próxima Luna Llena</span>
-            <span id="nextFullMoon" class="value-ios">--/--/----</span>
-        </div>
-
     </div>
 
-  </div>
-
-  <!-- ===========================
-       GRÁFICOS
-       =========================== -->
-  <div class="charts">
-    <div class="chart-block">
-      <h3>Temperatura (últimos segundos)</h3>
-      <canvas id="tempChart"></canvas>
+    <div class="charts">
+        <div class="chart-block">
+            <h3>Temperatura (última hora)</h3>
+            <canvas id="tempHourChart"></canvas>
+        </div>
+        <div class="chart-block">
+            <h3>Humedad (última hora)</h3>
+            <canvas id="humHourChart"></canvas>
+        </div>
     </div>
-    <div class="chart-block">
-      <h3>Humedad (últimos segundos)</h3>
-      <canvas id="humChart"></canvas>
-    </div>
-  </div>
 
-  <div class="charts">
-    <div class="chart-block">
-      <h3>Temperatura (última hora)</h3>
-      <canvas id="tempHourChart"></canvas>
-    </div>
-    <div class="chart-block">
-      <h3>Humedad (última hora)</h3>
-      <canvas id="humHourChart"></canvas>
-    </div>
-  </div>
+    <div class="footer">by: Luciano Aromi</div>
 
-  <div class="footer">by: Luciano Aromi</div>
+    <script>
+        let tempChart, humChart;
+        let tempHourChart, humHourChart;
 
-  <script>
-  let tempChart, humChart;
-  let tempHourChart, humHourChart;
+        const HOUR_POINTS = 60;
+        let bufferTemp = [];
+        let bufferHum = [];
 
-  const HOUR_POINTS = 60;
-  let bufferTemp = [];
-  let bufferHum  = [];
-
-  function smoothEWMA(values, alpha = 0.2) {
-      if (values.length < 2) return values[values.length - 1];
-
-      let prev = values[0];
-      let smoothed = prev;
-
-      for (let i = 1; i < values.length; i++) {
-          smoothed = alpha * values[i] + (1 - alpha) * prev;
-          prev = smoothed;
-      }
-
-      return smoothed;
-  }
-
-function crearGraficos() {
-
-    const tctx = document.getElementById('tempChart').getContext('2d');
-    const hctx = document.getElementById('humChart').getContext('2d');
-
-    tempChart = new Chart(tctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{
-            label: 'Temperatura (°C)',
-            data: [],
-            borderColor: 'rgba(255,99,132,1)',
-            backgroundColor: 'rgba(255,99,132,0.25)',
-            tension: 0.4,
-            pointRadius: 0
-        }]},
-        options: {
-            animation: false,
-            scales: {
-                x: {
-                    display: false,
-                    grid: {
-                        color: "rgba(255,255,255,0.12)",
-                        lineWidth: 1
-                    }
-                },
-                y: {
-                    beginAtZero: false,
-                    grid: {
-                        color: "rgba(255,255,255,0.12)",
-                        lineWidth: 1
-                    },
-                    ticks: {
-                        callback: function(v){ return v.toFixed(1); }
-                    }
-                }
+        function smoothEWMA(values, alpha = 0.2) {
+            if (values.length < 2) {
+                return values[values.length - 1];
             }
-        }
-    });
 
-    humChart = new Chart(hctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{
-            label: 'Humedad (%)',
-            data: [],
-            borderColor: 'rgba(54,162,235,1)',
-            backgroundColor: 'rgba(54,162,235,0.25)',
-            tension: 0.4,
-            pointRadius: 0
-        }]},
-        options: {
-            animation: false,
-            scales: {
-                x: {
-                    display: false,
-                    grid: {
-                        color: "rgba(255,255,255,0.12)",
-                        lineWidth: 1
-                    }
+            let prev = values[0];
+            let smoothed = prev;
+
+            for (let i = 1; i < values.length; i++) {
+                smoothed = alpha * values[i] + (1 - alpha) * prev;
+                prev = smoothed;
+            }
+
+            return smoothed;
+        }
+
+        function crearGraficos() {
+            const tctx = document.getElementById('tempChart').getContext('2d');
+            const hctx = document.getElementById('humChart').getContext('2d');
+
+            tempChart = new Chart(tctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: [],
+                        borderColor: 'rgba(255,99,132,1)',
+                        backgroundColor: 'rgba(255,99,132,0.25)',
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
                 },
-                y: {
-                    beginAtZero: false,
-                    suggestedMax: 100,
-                    grid: {
-                        color: "rgba(255,255,255,0.12)",
-                        lineWidth: 1
-                    },
-                    ticks: {
-                        callback:function(v){ return v.toFixed(1); }
+                options: {
+                    animation: false,
+                    scales: {
+                        x: {
+                            display: false,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            },
+                            ticks: {
+                                callback: function (v) {
+                                    return v.toFixed(1);
+                                }
+                            }
+                        }
                     }
                 }
-           }
-        }
-    });
+            });
 
-    const thctx = document.getElementById('tempHourChart').getContext('2d');
-    const hhctx = document.getElementById('humHourChart').getContext('2d');
-
-    tempHourChart = new Chart(thctx, {
-        type: 'scatter',
-        data: { datasets: [{
-            label: 'Temp 1h (°C)',
-            data: [],
-            borderColor:'rgba(255,99,132,1)',
-            backgroundColor:'rgba(255,99,132,1)',
-            showLine:false,
-            pointRadius:3
-        }]},
-        options:{
-            animation:false,
-            scales:{
-                x:{
-                    type:'linear',
-                    min:0,
-                    max:HOUR_POINTS-1,
-                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 }
+            humChart = new Chart(hctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Humedad (%)',
+                        data: [],
+                        borderColor: 'rgba(54,162,235,1)',
+                        backgroundColor: 'rgba(54,162,235,0.25)',
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
                 },
-                y:{
-                    beginAtZero:false,
-                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 },
-                    ticks:{ callback:function(v){ return v.toFixed(1); } }
+                options: {
+                    animation: false,
+                    scales: {
+                        x: {
+                            display: false,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            suggestedMax: 100,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            },
+                            ticks: {
+                                callback: function (v) {
+                                    return v.toFixed(1);
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-        }
-    });
+            });
 
-    humHourChart = new Chart(hhctx, {
-        type:'scatter',
-        data:{ datasets:[{
-            label:'Hum 1h (%)',
-            data:[],
-            borderColor:'rgba(54,162,235,1)',
-            backgroundColor:'rgba(54,162,235,1)',
-            showLine:false,
-            pointRadius:3
-        }]},
-        options:{
-            animation:false,
-            scales:{
-                x:{
-                    type:'linear',
-                    min:0,
-                    max:HOUR_POINTS-1,
-                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 }
+            const thctx = document.getElementById('tempHourChart').getContext('2d');
+            const hhctx = document.getElementById('humHourChart').getContext('2d');
+
+            tempHourChart = new Chart(thctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Temp 1h (°C)',
+                        data: [],
+                        borderColor: 'rgba(255,99,132,1)',
+                        backgroundColor: 'rgba(255,99,132,1)',
+                        showLine: false,
+                        pointRadius: 3
+                    }]
                 },
-                y:{
-                    beginAtZero:false,
-                    suggestedMax:100,
-                    grid:{ color:"rgba(255,255,255,0.12)", lineWidth:1 },
-                    ticks:{ callback:function(v){ return v.toFixed(0); } }
+                options: {
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 0,
+                            max: HOUR_POINTS - 1,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            },
+                            ticks: {
+                                callback: function (v) {
+                                    return v.toFixed(1);
+                                }
+                            }
+                        }
+                    }
                 }
-            }
+            });
+
+            humHourChart = new Chart(hhctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Hum 1h (%)',
+                        data: [],
+                        borderColor: 'rgba(54,162,235,1)',
+                        backgroundColor: 'rgba(54,162,235,1)',
+                        showLine: false,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 0,
+                            max: HOUR_POINTS - 1,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            suggestedMax: 100,
+                            grid: {
+                                color: 'rgba(255,255,255,0.12)',
+                                lineWidth: 1
+                            },
+                            ticks: {
+                                callback: function (v) {
+                                    return v.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
-    });
-}
 
-function agregarPunto(chart,label,value,maxPts){
-    chart.data.labels.push(label);
-    chart.data.datasets[0].data.push(value);
+        function agregarPunto(chart, label, value, maxPts) {
+            chart.data.labels.push(label);
+            chart.data.datasets[0].data.push(value);
 
-    if(chart.data.labels.length > maxPts){
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-    }
-
-    chart.update();
-}
-
-function actualizarDatos(){
-
-    fetch('/data')
-        .then(r=>r.json())
-        .then(d=>{
-
-            document.getElementById('temp').textContent = d.temp.toFixed(1);
-            document.getElementById('hum').textContent  = d.hum.toFixed(1);
-            document.getElementById('tmin').textContent = d.tmin.toFixed(1);
-            document.getElementById('tmax').textContent = d.tmax.toFixed(1);
-            document.getElementById('hmin').textContent = d.hmin.toFixed(1);
-            document.getElementById('hmax').textContent = d.hmax.toFixed(1);
-            document.getElementById('time').textContent = d.time;
-
-            document.getElementById("moonIcon").textContent      = d.moonIcon;
-            document.getElementById("moonName").textContent      = d.moonName;
-            document.getElementById("nextNewMoon").textContent   = d.nextNewMoon;
-            document.getElementById("nextFullMoon").textContent  = d.nextFullMoon;
-
-            bufferTemp.push(d.temp);
-            bufferHum.push(d.hum);
-
-            if(bufferTemp.length > 50) bufferTemp.shift();
-            if(bufferHum.length > 50)  bufferHum.shift();
-
-            const tempSmoothed = smoothEWMA(bufferTemp, 0.2);
-            const humSmoothed  = smoothEWMA(bufferHum, 0.2);
-
-            agregarPunto(tempChart, d.time, tempSmoothed, 40);
-            agregarPunto(humChart , d.time, humSmoothed, 40);
-
-            tempChart.options.scales.y.min = tempSmoothed - 0.5;
-            tempChart.options.scales.y.max = tempSmoothed + 0.5;
-
-            humChart.options.scales.y.min = humSmoothed - 2;
-            humChart.options.scales.y.max = humSmoothed + 2;
-
-            tempChart.update();
-            humChart.update();
-
-            const hc = d.hcount;
-
-            tempHourChart.data.datasets[0].data = [];
-            humHourChart.data.datasets[0].data = [];
-
-            for (let i = 0; i < hc; i++) {
-                tempHourChart.data.datasets[0].data.push({ x: i, y: d.histT[i] });
-                humHourChart.data.datasets[0].data.push({ x: i, y: d.histH[i] });
+            if (chart.data.labels.length > maxPts) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
             }
 
-            if (hc > 2) {
-                const minT = Math.min(...d.histT);
-                const maxT = Math.max(...d.histT);
-                tempHourChart.options.scales.y.min = minT - 4;
-                tempHourChart.options.scales.y.max = maxT + 4;
+            chart.update();
+        }
 
-                const minH = Math.min(...d.histH);
-                const maxH = Math.max(...d.histH);
-                humHourChart.options.scales.y.min = minH - 20;
-                humHourChart.options.scales.y.max = maxH + 20;
+        function actualizarDatos() {
+            fetch('/data')
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('temp').textContent = d.temp.toFixed(1);
+                    document.getElementById('hum').textContent = d.hum.toFixed(1);
+                    document.getElementById('tmin').textContent = d.tmin.toFixed(1);
+                    document.getElementById('tmax').textContent = d.tmax.toFixed(1);
+                    document.getElementById('hmin').textContent = d.hmin.toFixed(1);
+                    document.getElementById('hmax').textContent = d.hmax.toFixed(1);
+                    document.getElementById('time').textContent = d.time;
+
+                    document.getElementById('moonIcon').textContent = d.moonIcon;
+                    document.getElementById('moonName').textContent = d.moonName;
+                    document.getElementById('nextNewMoon').textContent = d.nextNewMoon;
+                    document.getElementById('nextFullMoon').textContent = d.nextFullMoon;
+
+                    bufferTemp.push(d.temp);
+                    bufferHum.push(d.hum);
+
+                    if (bufferTemp.length > 50) {
+                        bufferTemp.shift();
+                    }
+
+                    if (bufferHum.length > 50) {
+                        bufferHum.shift();
+                    }
+
+                    const tempSmoothed = smoothEWMA(bufferTemp, 0.2);
+                    const humSmoothed = smoothEWMA(bufferHum, 0.2);
+
+                    agregarPunto(tempChart, d.time, tempSmoothed, 40);
+                    agregarPunto(humChart, d.time, humSmoothed, 40);
+
+                    tempChart.options.scales.y.min = tempSmoothed - 0.5;
+                    tempChart.options.scales.y.max = tempSmoothed + 0.5;
+
+                    humChart.options.scales.y.min = humSmoothed - 2;
+                    humChart.options.scales.y.max = humSmoothed + 2;
+
+                    tempChart.update();
+                    humChart.update();
+
+                    const hc = d.hcount;
+
+                    tempHourChart.data.datasets[0].data = [];
+                    humHourChart.data.datasets[0].data = [];
+
+                    for (let i = 0; i < hc; i++) {
+                        tempHourChart.data.datasets[0].data.push({ x: i, y: d.histT[i] });
+                        humHourChart.data.datasets[0].data.push({ x: i, y: d.histH[i] });
+                    }
+
+                    if (hc > 2) {
+                        const minT = Math.min(...d.histT);
+                        const maxT = Math.max(...d.histT);
+                        tempHourChart.options.scales.y.min = minT - 4;
+                        tempHourChart.options.scales.y.max = maxT + 4;
+
+                        const minH = Math.min(...d.histH);
+                        const maxH = Math.max(...d.histH);
+                        humHourChart.options.scales.y.min = minH - 20;
+                        humHourChart.options.scales.y.max = maxH + 20;
+                    }
+
+                    tempHourChart.update();
+                    humHourChart.update();
+                })
+                .catch(err => console.error('Error al obtener /data', err));
+        }
+
+        window.addEventListener('load', () => {
+            crearGraficos();
+            actualizarDatos();
+            setInterval(actualizarDatos, 2000);
+            cargarInfoCSV();
+            setInterval(cargarInfoCSV, 5000);
+        });
+
+        function cargarInfoCSV() {
+            fetch('/csvinfo')
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('csvFirst').textContent = d.first || '--/--/----';
+                    document.getElementById('csvLast').textContent = d.last || '--/--/----';
+                })
+                .catch(err => console.error('Error al obtener /csvinfo', err));
+        }
+    </script>
+
+    <!-- ===== TARJETA DE INFORME DEL CSV ===== -->
+    <div class="panel panel-csv">
+        <h2 class="csv-title">Historial CSV</h2>
+
+        <div class="csv-row">
+            <strong>Primer registro:</strong>
+            <span id="csvFirst">--/--/----</span>
+        </div>
+
+        <div class="csv-row csv-row-large">
+            <strong>Último registro:</strong>
+            <span id="csvLast">--/--/----</span>
+        </div>
+
+        <div class="csv-actions">
+            <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
+            <button id="btnClear" class="circular-btn btn-clear">
+                <span class="material-symbols-rounded btn-icon">delete</span>
+                <span class="btn-label">CLEAR</span>
+            </button>
+
+            <!-- ========== BOTÓN CSV (VERDE) ========== -->
+            <button id="btnCSV" class="circular-btn btn-csv">
+                <span class="material-symbols-rounded btn-icon">table</span>
+                <span class="btn-label">.CSV</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('btnCSV').addEventListener('click', function () {
+            window.location.href = '/csv';
+        });
+
+        document.getElementById('btnClear').addEventListener('click', function () {
+            if (confirm('¿Seguro que deseas borrar TODO el historial del CSV?')) {
+                fetch('/clearcsv')
+                    .then(() => alert('Historial CSV borrado correctamente.'))
+                    .catch(() => alert('Error al borrar el CSV.'));
             }
-
-            tempHourChart.update();
-            humHourChart.update();
-        })
-        .catch(err => console.error('Error al obtener /data', err));
-}
-
-
-window.addEventListener('load', () => {
-    crearGraficos();
-    actualizarDatos();
-    setInterval(actualizarDatos, 2000);
-    cargarInfoCSV();
-    setInterval(cargarInfoCSV, 5000);
-});
-
-
-function cargarInfoCSV() {
-    fetch("/csvinfo")
-        .then(r => r.json())
-        .then(d => {
-            document.getElementById("csvFirst").textContent = d.first || "--/--/----";
-            document.getElementById("csvLast").textContent  = d.last  || "--/--/----";
-        })
-        .catch(err => console.error('Error al obtener /csvinfo', err));
-}
-
-
-</script>
-
-
-<!-- ===== TARJETA DE INFORME DEL CSV ===== -->
-<div class="panel panel-csv">
-
-    <h2 class="csv-title">Historial CSV</h2>
-
-    <div class="csv-row">
-        <strong>Primer registro:</strong>
-        <span id="csvFirst">--/--/----</span>
-    </div>
-
-    <div class="csv-row csv-row-large">
-        <strong>Último registro:</strong>
-        <span id="csvLast">--/--/----</span>
-    </div>
-
-    <div class="csv-actions">
-
-        <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
-        <button id="btnClear" class="circular-btn btn-clear">
-            <span class="material-symbols-rounded btn-icon">
-                delete
-            </span>
-            <span class="btn-label">CLEAR</span>
-        </button>
-
-        <!-- ========== BOTÓN CSV (VERDE) ========== -->
-        <button id="btnCSV" class="circular-btn btn-csv">
-            <span class="material-symbols-rounded btn-icon">
-                table
-            </span>
-            <span class="btn-label">.CSV</span>
-        </button>
-
-    </div>
-
-</div>
-
-
-<script>
-document.getElementById("btnCSV").addEventListener("click", function(){
-    window.location.href = "/csv";
-});
-
-document.getElementById("btnClear").addEventListener("click", function(){
-    if (confirm("¿Seguro que deseas borrar TODO el historial del CSV?")) {
-        fetch("/clearcsv")
-            .then(()=> alert("Historial CSV borrado correctamente."))
-            .catch(()=> alert("Error al borrar el CSV."));
-    }
-});
-</script>
-
+        });
+    </script>
 </body>
 </html>
-
 
 
 <!-- ============================================================================================= -->
