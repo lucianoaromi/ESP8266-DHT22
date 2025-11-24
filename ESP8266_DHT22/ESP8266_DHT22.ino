@@ -931,19 +931,19 @@ void loop() {
         /* Botones responsive */
         #btnCSV,
         #btnClear {
-            width: clamp(48px, 6vw, 70px);
-            height: clamp(48px, 6vw, 70px);
+            width: clamp(44px, 5.5vw, 60px);
+            height: clamp(44px, 5.5vw, 60px);
             border-radius: 50%;
         }
 
         #btnCSV span.material-symbols-rounded,
         #btnClear span.material-symbols-rounded {
-            font-size: clamp(20px, 3.5vw, 30px);
+            font-size: clamp(16px, 2.6vw, 24px);
         }
 
         #btnCSV .btn-label,
         #btnClear .btn-label {
-            font-size: clamp(6px, 1.6vw, 9px);
+            font-size: clamp(5.5px, 1.4vw, 8px);
         }
 
         .heading-main {
@@ -975,30 +975,33 @@ void loop() {
         }
 
         .panel-csv {
-            max-width: 450px;
-            margin: 35px auto;
+            max-width: 330px;
+            margin: 25px auto;
             background: #11131d;
             text-align: center;
+            padding: 18px 24px;
         }
 
         .csv-title {
             text-align: center;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
+            font-size: 20px;
         }
 
         .csv-row {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 15px;
         }
 
         .csv-row-large {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .csv-actions {
             display: flex;
             justify-content: center;
-            gap: 25px;
-            margin-top: 20px;
+            gap: 20px;
+            margin-top: 16px;
         }
 
         .circular-btn {
@@ -1042,7 +1045,7 @@ void loop() {
         }
 
         .btn-label {
-            font-size: 8px;
+            font-size: 7px;
         }
 
         #btnClear .btn-icon {
@@ -1164,8 +1167,6 @@ void loop() {
             <canvas id="humHourChart"></canvas>
         </div>
     </div>
-
-    <div class="footer">by: Luciano Aromi</div>
 
     <script>
         let tempChart, humChart;
@@ -1479,7 +1480,7 @@ void loop() {
             <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
             <button id="btnClear" class="circular-btn btn-clear">
                 <span class="material-symbols-rounded btn-icon">delete</span>
-                <span class="btn-label">CLEAR</span>
+                <span class="btn-label">Clear</span>
             </button>
 
             <!-- ========== BOTÓN CSV (VERDE) ========== -->
@@ -1489,6 +1490,8 @@ void loop() {
             </button>
         </div>
     </div>
+
+    <div class="footer">by: Luciano Aromi</div>
 
     <script>
         document.getElementById('btnCSV').addEventListener('click', function () {
