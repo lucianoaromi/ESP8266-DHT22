@@ -731,7 +731,6 @@ void loop() {
   client.println(R"rawliteral(
 <!-- ============================================================================================= -->
 
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -761,21 +760,75 @@ void loop() {
         }
 
         .panel {
-            margin: 20px auto;
+            margin: 16px auto;
             display: inline-block;
             text-align: left;
-            padding: 25px 35px;
+            padding: 12px 20px;
             border-radius: 16px;
             background: #1b1d2b;
             min-width: 300px;
         }
 
-        .section-title {
-            font-size: 20px;
-            margin-bottom: 10px;
+        .header-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            width: 100%;
+            max-width: 650px;
+        }
+
+        .header-info {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 14px;
+        }
+
+        .header-icon {
+            font-size: 42px;
+            color: #ff8b5d;
+        }
+
+        .header-text h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: -0.01em;
+        }
+
+        .header-subtitle {
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: rgba(224, 224, 224, 0.62);
+        }
+
+        .header-update {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+        }
+
+        .update-label {
+            font-size: 9px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(224, 224, 224, 0.52);
+        }
+
+        .update-value {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .section-title {
+            font-size: 18.7px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
             font-weight: bold;
         }
 
@@ -787,10 +840,14 @@ void loop() {
 
         #temp {
             color: #FFD700;
+            font-size: 26px;
+            font-weight: 700;
         }
 
         #hum {
             color: #00B4FF;
+            font-size: 26px;
+            font-weight: 700;
         }
 
         .icon-temp {
@@ -806,28 +863,28 @@ void loop() {
         }
 
         .label {
-            margin: 8px 0;
-            font-size: 17px;
+            margin: 4px 0;
+            font-size: 15.4px;
         }
 
         .value {
-            font-size: 19px;
+            font-size: 17.6px;
             font-weight: bold;
         }
 
         .charts {
             max-width: 1000px;
-            margin: 20px auto;
+            margin: 14px auto;
             display: flex;
             flex-wrap: wrap;
             justify-content: space-around;
-            gap: 20px;
+            gap: 18px;
         }
 
         canvas {
             background: #141622;
             border-radius: 10px;
-            padding: 12px;
+            padding: 8px;
         }
 
         .footer {
@@ -917,12 +974,12 @@ void loop() {
         }
 
         .label-ios {
-            font-size: 16px;
+            font-size: 14px;
             color: #B7B7B7;
         }
 
         .value-ios {
-            font-size: 17px;
+            font-size: 15px;
             font-weight: 600;
             color: #EEE;
         }
@@ -961,50 +1018,50 @@ void loop() {
         .panel-main {
             position: relative;
             display: flex;
-            gap: 20px;
+            gap: 14px;
             align-items: flex-start;
-            padding: 20px 25px;
+            padding: 14px 18px;
             width: 100%;
             max-width: 650px;
-            margin: 20px auto;
+            margin: 14px auto;
         }
 
         .climate-section {
             flex: 1;
             min-width: 260px;
-            padding-right: 10px;
+            padding-right: 6px;
         }
 
         .lunar-section {
             flex: 1;
             min-width: 240px;
-            padding-left: 10px;
+            padding-left: 6px;
         }
 
         .panel-csv {
             max-width: 260px;
             width: clamp(200px, 60%, 260px);
             min-width: 0;
-            margin: 22px auto;
+            margin: 16px auto;
             background: #11131d;
             text-align: center;
-            padding: 14px 18px;
+            padding: 8px 12px;
         }
 
         .csv-title {
             text-align: center;
-            margin-bottom: 10px;
-            font-size: 18px;
+            margin-bottom: 8px;
+            font-size: 17px;
         }
 
         .csv-row {
-            margin-bottom: 5px;
-            font-size: 14px;
+            margin-bottom: 3px;
+            font-size: 13px;
             color: #adb1bc;
         }
 
         .csv-row-large {
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
 
         .csv-row strong {
@@ -1018,14 +1075,21 @@ void loop() {
 
         .csv-row span.value-bold {
             font-weight: 600;
-            color: #b9bec9;
+            color: #bdc2cc;
         }
 
         .csv-actions {
             display: flex;
             justify-content: center;
-            gap: 20px;
-            margin-top: 16px;
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        hr {
+            border: none;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.08);
+            margin: 10px 0;
         }
 
         .circular-btn {
@@ -1098,9 +1162,19 @@ void loop() {
     </style>
 </head>
 <body>
-    <h1 class="heading-main">
-        Monitor Ambiental ESP8266/DHT22
-    </h1>
+    <div class="panel header-panel">
+        <div class="header-info">
+            <span class="material-symbols-rounded header-icon">sensors</span>
+            <div class="header-text">
+                <h1>Monitor Ambiental</h1>
+                <p class="header-subtitle">ESP8266 · DHT22</p>
+            </div>
+        </div>
+        <div class="header-update">
+            <span class="update-label">Última actualización</span>
+            <span id="time" class="update-value">--/--/---- --:--:--</span>
+        </div>
+    </div>
 
     <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
     <div class="panel panel-main">
@@ -1132,17 +1206,6 @@ void loop() {
                 Hum Min/Max:
                 <span id="hmin" class="value">--.-</span> /
                 <span id="hmax" class="value">--.-</span> %
-            </div>
-
-            <hr>
-
-            <div class="section-title">
-                <span class="icon icon-time">schedule</span>
-                Última actualización
-            </div>
-
-            <div class="label">
-                <span id="time" class="value">--/--/---- --:--:--</span>
             </div>
         </div>
 
@@ -1540,7 +1603,6 @@ void loop() {
     </script>
 </body>
 </html>
-
 
 <!-- ============================================================================================= -->
 
