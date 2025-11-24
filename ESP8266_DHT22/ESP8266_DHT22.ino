@@ -731,220 +731,320 @@ void loop() {
   client.println(R"rawliteral(
 <!-- ============================================================================================= -->
 
+
+
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Monitor Ambiental ESP8266/DHT22</title>
 
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <style>
-    body{
-      background:#0d0f1a;
-      color:#e0e0e0;
-      font-family:Segoe UI, sans-serif;
-      text-align:center;
-      padding:25px;
-    }
-    h1{margin-bottom:5px;}
-    h2{margin-top:0;color:#aaa;}
+    <style>
+        body{
+            background:#0d0f1a;
+            color:#e0e0e0;
+            font-family:Segoe UI, sans-serif;
+            text-align:center;
+            padding:25px;
+        }
+        h1{margin-bottom:5px;}
+        h2{margin-top:0;color:#aaa;}
 
-    .panel{
-      margin:20px auto;
-      display:inline-block;
-      text-align:left;
-      padding:25px 35px;
-      border-radius:16px;
-      background:#1b1d2b;
-      box-shadow:0 0 18px rgba(0,0,0,0.7);
-      min-width:300px;
-    }
+        .panel{
+            margin:20px auto;
+            display:inline-block;
+            text-align:left;
+            padding:25px 35px;
+            border-radius:16px;
+            background:#1b1d2b;
+            box-shadow:0 0 18px rgba(0,0,0,0.7);
+            min-width:300px;
+        }
 
-    .section-title{
-      font-size:20px;
-      margin-bottom:10px;
-      display:flex;
-      align-items:center;
-      gap:8px;
-      font-weight:bold;
-    }
+        .section-title{
+            font-size:20px;
+            margin-bottom:10px;
+            display:flex;
+            align-items:center;
+            gap:8px;
+            font-weight:bold;
+        }
 
-    .icon{
-      font-family: 'Material Symbols Rounded';
-      font-size:28px;
-      vertical-align:middle;
-    }
+        .icon{
+            font-family: 'Material Symbols Rounded';
+            font-size:28px;
+            vertical-align:middle;
+        }
 
-    #temp{ color:#FFD700; }
-    #hum{  color:#00B4FF; }
+        #temp{ color:#FFD700; }
+        #hum{  color:#00B4FF; }
 
-    .icon-temp { color:#FFC107; }
-    .icon-hum  { color:#03A9F4; }
-    .icon-time { color:#4CAF50; }
+        .icon-temp { color:#FFC107; }
+        .icon-hum  { color:#03A9F4; }
+        .icon-time { color:#4CAF50; }
 
-    .label{margin:8px 0;font-size:17px;}
-    .value{font-size:19px;font-weight:bold;}
+        .label{margin:8px 0;font-size:17px;}
+        .value{font-size:19px;font-weight:bold;}
 
-    .charts{
-      max-width:1000px;
-      margin:20px auto;
-      display:flex;
-      flex-wrap:wrap;
-      justify-content:space-around;
-      gap:20px;
-    }
+        .charts{
+            max-width:1000px;
+            margin:20px auto;
+            display:flex;
+            flex-wrap:wrap;
+            justify-content:space-around;
+            gap:20px;
+        }
 
-    canvas{
-      background:#141622;
-      border-radius:10px;
-      padding:12px;
-    }
+        canvas{
+            background:#141622;
+            border-radius:10px;
+            padding:12px;
+        }
 
-    .footer{
-      margin-top:25px;
-      font-size:16px;
-      font-family:Georgia, serif;
-      color:#DAA5;
-      font-style:italic;
-      text-shadow:0 0 3px rgba(255, 215, 0, 0.25);
-    }
+        .footer{
+            margin-top:25px;
+            font-size:16px;
+            font-family:Georgia, serif;
+            color:#DAA5;
+            font-style:italic;
+            text-shadow:0 0 3px rgba(255, 215, 0, 0.25);
+        }
 
-    .chart-block{
-      flex:1;
-      min-width:280px;
-    }
+        .chart-block{
+            flex:1;
+            min-width:280px;
+        }
 
-    /* ======== Estilo iPhone Lunar Card ======== */
-    .lunar-ios {
-        background: rgba(255,255,255,0.04);
-        padding: 28px;
-        border-radius: 22px;
-        box-shadow:
-            inset 0 0 12px rgba(255,255,255,0.05),
-            0 8px 22px rgba(0,0,0,0.35);
-        backdrop-filter: blur(10px);
-        transition: 0.25s;
-        min-width: 320px;
-    }
+        /* ======== Estilo iPhone Lunar Card ======== */
+        .lunar-ios {
+                background: rgba(255,255,255,0.04);
+                padding: 28px;
+                border-radius: 22px;
+                box-shadow:
+                        inset 0 0 12px rgba(255,255,255,0.05),
+                        0 8px 22px rgba(0,0,0,0.35);
+                -webkit-backdrop-filter: blur(10px);
+                backdrop-filter: blur(10px);
+                transition: 0.25s;
+                min-width: 320px;
+        }
 
-    .lunar-ios:hover {
-        transform: scale(1.02);
-        box-shadow:
-            inset 0 0 16px rgba(255,255,255,0.07),
-            0 12px 30px rgba(0,0,0,0.45);
-    }
+        .lunar-ios:hover {
+                transform: scale(1.02);
+                box-shadow:
+                        inset 0 0 16px rgba(255,255,255,0.07),
+                        0 12px 30px rgba(0,0,0,0.45);
+        }
 
-    .lunar-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 15px;
-    }
+        .lunar-header {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 15px;
+        }
 
-    .lunar-icon-title {
-        font-family: 'Material Symbols Rounded';
-        font-size: 28px;
-        color: #C8C9CC;
-    }
+        .lunar-icon-title {
+                font-family: 'Material Symbols Rounded';
+                font-size: 28px;
+                color: #C8C9CC;
+        }
 
-    .lunar-title {
-        font-size: 22px;
-        font-weight: 600;
-        color: #EEE;
-    }
+        .lunar-title {
+                font-size: 22px;
+                font-weight: 600;
+                color: #EEE;
+        }
 
-    .lunar-moon-icon {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 10px;
-    }
+        .lunar-moon-icon {
+                display: flex;
+                justify-content: center;
+                margin-bottom: 10px;
+        }
 
-    .moon-emoji {
-        font-size: 60px;
-        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
-    }
+        .moon-emoji {
+                font-size: 60px;
+                filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        }
 
-    .lunar-phase-name {
-        text-align: center;
-        font-size: 20px;
-        font-weight: 600;
-        color: #DCDCDC;
-        margin-bottom: 15px;
-    }
+        .lunar-phase-name {
+                text-align: center;
+                font-size: 20px;
+                font-weight: 600;
+                color: #DCDCDC;
+                margin-bottom: 15px;
+        }
 
-    .divider {
-        width: 100%;
-        height: 1px;
-        background: rgba(255,255,255,0.10);
-        margin: 12px 0 18px 0;
-    }
+        .divider {
+                width: 100%;
+                height: 1px;
+                background: rgba(255,255,255,0.10);
+                margin: 12px 0 18px 0;
+        }
 
-    .lunar-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 4px 0;
-    }
+        .lunar-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 4px 0;
+        }
 
-    .label-ios {
-        font-size: 16px;
-        color: #B7B7B7;
-    }
+        .label-ios {
+                font-size: 16px;
+                color: #B7B7B7;
+        }
 
-    .value-ios {
-        font-size: 17px;
-        font-weight: 600;
-        color: #EEE;
-    }
+        .value-ios {
+                font-size: 17px;
+                font-weight: 600;
+                color: #EEE;
+        }
 
-    /* Botones responsive */
-    #btnCSV, #btnClear {
-        width: clamp(55px, 8vw, 85px);
-        height: clamp(55px, 8vw, 85px);
-        border-radius: 50%;
-    }
+        /* Botones responsive */
+        #btnCSV, #btnClear {
+                width: clamp(55px, 8vw, 85px);
+                height: clamp(55px, 8vw, 85px);
+                border-radius: 50%;
+        }
 
-    #btnCSV span.material-symbols-rounded,
-    #btnClear span.material-symbols-rounded {
-        font-size: clamp(22px, 4vw, 34px);
-    }
+        #btnCSV span.material-symbols-rounded,
+        #btnClear span.material-symbols-rounded {
+                font-size: clamp(22px, 4vw, 34px);
+        }
 
-    #btnCSV span,
-    #btnClear span {
-        font-size: clamp(8px, 2vw, 12px);
-    }
+        #btnCSV .btn-label,
+        #btnClear .btn-label {
+                font-size: clamp(8px, 2vw, 12px);
+        }
 
-  </style>
+        .heading-main{
+            color:#A05C1F;
+            font-size:22px;
+        }
+
+        .panel-main{
+            position:relative;
+            display:flex;
+            gap:20px;
+            align-items:flex-start;
+            padding:20px 25px;
+            width:100%;
+            max-width:650px;
+            margin:20px auto;
+        }
+
+        .climate-section{
+            flex:1;
+            min-width:260px;
+            padding-right:10px;
+        }
+
+        .lunar-section{
+            flex:1;
+            min-width:240px;
+            padding-left:10px;
+        }
+
+        .panel-csv{
+            max-width:450px;
+            margin:35px auto;
+            background:#11131d;
+            text-align:center;
+        }
+
+        .csv-title{
+            text-align:center;
+            margin-bottom:15px;
+        }
+
+        .csv-row{
+            margin-bottom:8px;
+        }
+
+        .csv-row-large{
+            margin-bottom:15px;
+        }
+
+        .csv-actions{
+            display:flex;
+            justify-content:center;
+            gap:25px;
+            margin-top:20px;
+        }
+
+        .circular-btn{
+            width:70px;
+            height:70px;
+            border-radius:50%;
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:4px;
+            transition:0.25s ease;
+            -webkit-backdrop-filter:blur(6px);
+            backdrop-filter:blur(6px);
+            border:1px solid transparent;
+        }
+
+        .circular-btn:hover{
+            transform:scale(1.1);
+        }
+
+        .btn-clear{
+            background:radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
+            border-color:rgba(120,0,0,0.55);
+            box-shadow:0 4px 14px rgba(0,0,0,0.50), inset 0 0 10px rgba(180,0,0,0.25);
+        }
+
+        .btn-csv{
+            background:radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
+            border-color:rgba(0,100,0,0.55);
+            box-shadow:0 4px 14px rgba(0,0,0,0.50), inset 0 0 10px rgba(0,160,0,0.25);
+        }
+
+        .btn-icon{
+            font-size:33px;
+        }
+
+        .btn-label{
+            font-size:9px;
+        }
+
+        #btnClear .btn-icon{
+            color:#7A2626;
+        }
+
+        #btnClear .btn-label{
+            color:#D45A5A;
+        }
+
+        #btnCSV .btn-icon{
+            color:#0A3F1E;
+        }
+
+        #btnCSV .btn-label{
+            color:#47B676;
+        }
+
+    </style>
 </head>
 
 <body>
 
-<h1 style="color:#A05C1F; font-size:22px;">
+<h1 class="heading-main">
     Monitor Ambiental ESP8266/DHT22
 </h1>
 
 
-<!-- ============================================================================================= -->
-
-
-<!-- ============================================================================================= -->
-
   <!-- Panel principal: Clima + Fase Lunar en una sola tarjeta horizontal -->
-  <div class="panel"
-       style="
-        position:relative;
-        display:flex;
-        gap:20px;
-        align-items:flex-start;
-        padding:20px 25px;
-        width:100%;
-        max-width:650px;
-        margin:20px auto;
-     ">
+    <div class="panel panel-main">
 
     <!-- ==================== SECCIÓN CLIMA ==================== -->
-    <div style="flex:1; min-width:260px; padding-right:10px;">
+    <div class="climate-section">
 
         <div class="section-title">
             <span class="icon icon-temp">wb_sunny</span>
@@ -988,7 +1088,7 @@ void loop() {
     </div>
 
     <!-- ==================== SECCIÓN LUNAR ==================== -->
-    <div style="flex:1; min-width:240px; padding-left:10px;">
+    <div class="lunar-section">
 
         <div class="lunar-header">
             <span class="lunar-icon-title">nightlight</span>
@@ -1279,15 +1379,18 @@ function actualizarDatos(){
 
             tempHourChart.update();
             humHourChart.update();
-        });
+        })
+        .catch(err => console.error('Error al obtener /data', err));
 }
 
 
-window.onload = function(){
+window.addEventListener('load', () => {
     crearGraficos();
-    setInterval(actualizarDatos,2000);
-
-};
+    actualizarDatos();
+    setInterval(actualizarDatos, 2000);
+    cargarInfoCSV();
+    setInterval(cargarInfoCSV, 5000);
+});
 
 
 function cargarInfoCSV() {
@@ -1296,89 +1399,45 @@ function cargarInfoCSV() {
         .then(d => {
             document.getElementById("csvFirst").textContent = d.first || "--/--/----";
             document.getElementById("csvLast").textContent  = d.last  || "--/--/----";
-        });
+        })
+        .catch(err => console.error('Error al obtener /csvinfo', err));
 }
-
-setInterval(cargarInfoCSV, 5000);
-cargarInfoCSV();
 
 
 </script>
 
 
 <!-- ===== TARJETA DE INFORME DEL CSV ===== -->
-<div class="panel" style="max-width:450px; margin:35px auto; background:#11131d; text-align:center;">
+<div class="panel panel-csv">
 
-    <h2 style="text-align:center; margin-bottom:15px;">Historial CSV</h2>
+    <h2 class="csv-title">Historial CSV</h2>
 
-    <div style="margin-bottom:8px;">
+    <div class="csv-row">
         <strong>Primer registro:</strong>
         <span id="csvFirst">--/--/----</span>
     </div>
 
-    <div style="margin-bottom:15px;">
+    <div class="csv-row csv-row-large">
         <strong>Último registro:</strong>
         <span id="csvLast">--/--/----</span>
     </div>
 
-    <div style="display:flex; justify-content:center; gap:25px; margin-top:20px;">
+    <div class="csv-actions">
 
         <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
-        <button id="btnClear"
-            style="
-                width:70px;
-                height:70px;
-                border-radius:50%;
-                background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
-                backdrop-filter: blur(6px);
-                border:1px solid rgba(120,0,0,0.55);
-                cursor:pointer;
-                display:flex;
-                flex-direction:column;
-                align-items:center;
-                justify-content:center;
-                gap:4px;
-                box-shadow:0 4px 14px rgba(0,0,0,0.50),
-                           inset 0 0 10px rgba(180,0,0,0.25);
-                transition:0.25s ease;
-            "
-            onmouseover="this.style.transform='scale(1.1)'"
-            onmouseout="this.style.transform='scale(1)'"
-        >
-            <span class="material-symbols-rounded"
-                style="font-size:33px; color:#7A2626;">
+        <button id="btnClear" class="circular-btn btn-clear">
+            <span class="material-symbols-rounded btn-icon">
                 delete
             </span>
-            <span style="font-size:9px; color:#D45A5A;">CLEAR</span>
+            <span class="btn-label">CLEAR</span>
         </button>
 
         <!-- ========== BOTÓN CSV (VERDE) ========== -->
-        <button id="btnCSV"
-            style="
-                width:70px;
-                height:70px;
-                border-radius:50%;
-                background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
-                backdrop-filter: blur(6px);
-                border:1px solid rgba(0,100,0,0.55);
-                cursor:pointer;
-                display:flex;
-                flex-direction:column;
-                align-items:center;
-                justify-content:center;
-                gap:4px;
-                box-shadow:0 4px 14px rgba(0,0,0,0.50),
-                           inset 0 0 10px rgba(0,160,0,0.25);
-                transition:0.25s ease;
-            "
-            onmouseover="this.style.transform='scale(1.1)'"
-            onmouseout="this.style.transform='scale(1)'"
-        >
-            <span class="material-symbols-rounded"
-                style="font-size:33px; color:#0A3F1E;">
+        <button id="btnCSV" class="circular-btn btn-csv">
+            <span class="material-symbols-rounded btn-icon">
                 table
             </span>
-            <span style="font-size:9px; color:#47B676;">.CSV</span>
+            <span class="btn-label">.CSV</span>
         </button>
 
     </div>
