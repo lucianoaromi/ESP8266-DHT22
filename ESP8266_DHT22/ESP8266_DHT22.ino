@@ -1014,54 +1014,62 @@ void loop() {
             align-items: center;
             justify-content: center;
             gap: 4px;
-            transition: 0.25s ease;
+            transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
             -webkit-backdrop-filter: blur(6px);
             backdrop-filter: blur(6px);
-            border: 1px solid transparent;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(160deg, rgba(28, 32, 48, 0.92), rgba(16, 18, 32, 0.92));
+            box-shadow:
+                inset 0 2px 6px rgba(255, 255, 255, 0.04),
+                0 12px 20px rgba(0, 0, 0, 0.35);
         }
 
         .circular-btn:hover {
-            transform: scale(1.1);
+            transform: translateY(-2px);
+            box-shadow:
+                inset 0 2px 6px rgba(255, 255, 255, 0.06),
+                0 16px 26px rgba(0, 0, 0, 0.45);
         }
 
         .btn-clear {
-            background: radial-gradient(circle, rgba(60, 0, 0, 0.15), rgba(25, 0, 0, 0.42));
-            border-color: rgba(120, 0, 0, 0.55);
+            border-color: rgba(255, 102, 120, 0.4);
+            background: linear-gradient(155deg, rgba(58, 24, 32, 0.9), rgba(32, 12, 18, 0.9));
             box-shadow:
-                0 4px 14px rgba(0, 0, 0, 0.50),
-                inset 0 0 10px rgba(180, 0, 0, 0.25);
+                inset 0 0 0 1px rgba(255, 110, 128, 0.18),
+                0 10px 18px rgba(255, 90, 112, 0.14);
         }
 
         .btn-csv {
-            background: radial-gradient(circle, rgba(0, 60, 0, 0.15), rgba(0, 25, 0, 0.42));
-            border-color: rgba(0, 100, 0, 0.55);
+            border-color: rgba(92, 190, 145, 0.4);
+            background: linear-gradient(155deg, rgba(28, 46, 39, 0.9), rgba(18, 30, 26, 0.9));
             box-shadow:
-                0 4px 14px rgba(0, 0, 0, 0.50),
-                inset 0 0 10px rgba(0, 160, 0, 0.25);
+                inset 0 0 0 1px rgba(110, 210, 165, 0.18),
+                0 10px 18px rgba(76, 182, 142, 0.14);
         }
 
         .btn-icon {
-            font-size: 33px;
+            font-size: 28px;
         }
 
         .btn-label {
             font-size: 7px;
+            letter-spacing: 0.4px;
         }
 
         #btnClear .btn-icon {
-            color: #7A2626;
+            color: #ff7b8c;
         }
 
         #btnClear .btn-label {
-            color: #D45A5A;
+            color: rgba(255, 187, 196, 0.88);
         }
 
         #btnCSV .btn-icon {
-            color: #0A3F1E;
+            color: #75e0aa;
         }
 
         #btnCSV .btn-label {
-            color: #47B676;
+            color: rgba(167, 240, 198, 0.88);
         }
     </style>
 </head>
