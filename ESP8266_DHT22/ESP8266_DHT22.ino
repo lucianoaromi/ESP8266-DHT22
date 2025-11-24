@@ -768,7 +768,6 @@ void loop() {
             padding: 25px 35px;
             border-radius: 16px;
             background: #1b1d2b;
-            box-shadow: 0 0 18px rgba(0, 0, 0, 0.7);
             min-width: 300px;
         }
 
@@ -932,19 +931,19 @@ void loop() {
         /* Botones responsive */
         #btnCSV,
         #btnClear {
-            width: clamp(55px, 8vw, 85px);
-            height: clamp(55px, 8vw, 85px);
+            width: clamp(48px, 6vw, 70px);
+            height: clamp(48px, 6vw, 70px);
             border-radius: 50%;
         }
 
         #btnCSV span.material-symbols-rounded,
         #btnClear span.material-symbols-rounded {
-            font-size: clamp(22px, 4vw, 34px);
+            font-size: clamp(20px, 3.5vw, 30px);
         }
 
         #btnCSV .btn-label,
         #btnClear .btn-label {
-            font-size: clamp(8px, 2vw, 12px);
+            font-size: clamp(6px, 1.6vw, 9px);
         }
 
         .heading-main {
@@ -1043,7 +1042,7 @@ void loop() {
         }
 
         .btn-label {
-            font-size: 9px;
+            font-size: 8px;
         }
 
         #btnClear .btn-icon {
@@ -1506,6 +1505,7 @@ void loop() {
     </script>
 </body>
 </html>
+
 
 
 <!-- ============================================================================================= -->
