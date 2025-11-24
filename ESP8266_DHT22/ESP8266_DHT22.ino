@@ -564,9 +564,9 @@ void loop() {
   String requestLine = client.readStringUntil('\r');
   client.read(); // consumir '\n'
 
-  Serial.print(">>> REQUEST LINE: [");
-  Serial.print(requestLine);
-  Serial.println("]");
+  //Serial.print(">>> REQUEST LINE: [");
+  //Serial.print(requestLine);
+  //Serial.println("]");
 
 
 
