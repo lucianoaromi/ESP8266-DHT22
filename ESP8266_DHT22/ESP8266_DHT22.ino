@@ -731,6 +731,8 @@ void loop() {
   client.println(R"rawliteral(
 <!-- ============================================================================================= -->
 
+
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -773,10 +775,10 @@ void loop() {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 12px;
-            padding: 14px 18px;
+            gap: 10px;
+            padding: 11px 15px;
             width: 100%;
-            max-width: 650px;
+            max-width: 560px;
         }
 
         .header-info {
@@ -1018,12 +1020,12 @@ void loop() {
         .panel-main {
             position: relative;
             display: flex;
-            gap: 14px;
+            gap: 11px;
             align-items: flex-start;
-            padding: 14px 18px;
+            padding: 11px 15px;
             width: 100%;
-            max-width: 650px;
-            margin: 14px auto;
+            max-width: 560px;
+            margin: 11px auto;
         }
 
         .climate-section {
@@ -1039,13 +1041,13 @@ void loop() {
         }
 
         .panel-csv {
-            max-width: 260px;
-            width: clamp(200px, 60%, 260px);
+            max-width: 220px;
+            width: clamp(180px, 52%, 220px);
             min-width: 0;
-            margin: 16px auto;
+            margin: 14px auto;
             background: #11131d;
             text-align: center;
-            padding: 8px 12px;
+            padding: 8px 10px;
         }
 
         .csv-title {
@@ -1081,8 +1083,8 @@ void loop() {
         .csv-actions {
             display: flex;
             justify-content: center;
-            gap: 16px;
-            margin-top: 12px;
+            gap: 12px;
+            margin-top: 10px;
         }
 
         hr {
@@ -1102,62 +1104,62 @@ void loop() {
             align-items: center;
             justify-content: center;
             gap: 4px;
-            transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-            -webkit-backdrop-filter: blur(6px);
-            backdrop-filter: blur(6px);
-            border: 1px solid rgba(255, 255, 255, 0.015);
-            background: linear-gradient(160deg, rgba(8, 9, 14, 0.95), rgba(3, 4, 8, 0.95));
-            box-shadow:
-                inset 0 2px 6px rgba(255, 255, 255, 0.015),
-                0 6px 12px rgba(0, 0, 0, 0.26);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: #141620;
+            transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
         }
 
         .circular-btn:hover {
-            transform: translateY(-1px);
-            box-shadow:
-                inset 0 2px 6px rgba(255, 255, 255, 0.03),
-                0 10px 18px rgba(0, 0, 0, 0.32);
+            transform: translateY(-2px);
+            background: #1c1f2b;
+            border-color: rgba(255, 255, 255, 0.12);
         }
 
         .btn-clear {
-            border-color: rgba(190, 90, 102, 0.14);
-            background: linear-gradient(155deg, rgba(28, 10, 16, 0.92), rgba(16, 5, 10, 0.92));
-            box-shadow:
-                inset 0 0 0 1px rgba(190, 102, 118, 0.08),
-                0 5px 10px rgba(160, 60, 76, 0.08);
+            background: #1f1419;
+            border-color: rgba(200, 90, 110, 0.26);
+        }
+
+        .btn-clear:hover {
+            background: #271a21;
+            border-color: rgba(200, 90, 110, 0.4);
         }
 
         .btn-csv {
-            border-color: rgba(96, 164, 132, 0.14);
-            background: linear-gradient(155deg, rgba(12, 24, 19, 0.92), rgba(6, 12, 10, 0.92));
-            box-shadow:
-                inset 0 0 0 1px rgba(110, 182, 148, 0.08),
-                0 5px 10px rgba(60, 120, 94, 0.08);
+            background: #111d18;
+            border-color: rgba(96, 164, 132, 0.26);
+        }
+
+        .btn-csv:hover {
+            background: #16251f;
+            border-color: rgba(96, 164, 132, 0.4);
         }
 
         .btn-icon {
-            font-size: 28px;
+            font-size: 24px;
+            color: #a3a8b4;
         }
 
         .btn-label {
-            font-size: 7px;
-            letter-spacing: 0.4px;
+            font-size: 8px;
+            letter-spacing: 0.36px;
+            color: #9398a3;
         }
 
         #btnClear .btn-icon {
-            color: rgba(150, 92, 104, 0.85);
+            color: #9a5764;
         }
 
         #btnClear .btn-label {
-            color: rgba(162, 124, 132, 0.68);
+            color: #82616a;
         }
 
         #btnCSV .btn-icon {
-            color: rgba(78, 128, 104, 0.85);
+            color: #46755d;
         }
 
         #btnCSV .btn-label {
-            color: rgba(120, 164, 144, 0.68);
+            color: #5f7f6d;
         }
     </style>
 </head>
@@ -1603,6 +1605,8 @@ void loop() {
     </script>
 </body>
 </html>
+
+
 
 <!-- ============================================================================================= -->
 
