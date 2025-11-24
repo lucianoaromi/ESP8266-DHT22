@@ -427,15 +427,6 @@ void setup() {
   enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 }
 
-
-
-
-
-
-
-
-
-
 // ==========================================================
 //      OBTENER FECHA INICIAL Y FINAL DEL CSV EXISTENTE
 // ==========================================================
@@ -493,17 +484,36 @@ String obtenerNombreCSV() {
 }
 
 
+// ==========================================================
+//  OBTENER FECHA PRIMERA Y ÚLTIMA LÍNEA DEL CSV
+// ==========================================================
+void obtenerFechasCSV(String &primera, String &ultima) {
+  primera = "";
+  ultima  = "";
 
+  if (!SPIFFS.exists(LOG_FILE)) return;
 
+  File f = SPIFFS.open(LOG_FILE, "r");
+  if (!f) return;
 
+  String linea;
+  bool esCabecera = true;
 
+  while (f.available()) {
+    linea = f.readStringUntil('\n');
 
+    if (esCabecera) {
+      esCabecera = false;
+      continue;
+    }
 
-
-
-
-
-
+    if (linea.length() > 5) {
+      if (primera == "") primera = linea.substring(0,10);
+      ultima = linea.substring(0,10);
+    }
+  }
+  f.close();
+}
 
 // =============================
 // LOOP PRINCIPAL
@@ -553,6 +563,12 @@ void loop() {
 
   String requestLine = client.readStringUntil('\r');
   client.read(); // consumir '\n'
+
+  Serial.print(">>> REQUEST LINE: [");
+  Serial.print(requestLine);
+  Serial.println("]");
+
+
 
   while (client.available()) {
     String header = client.readStringUntil('\r');
@@ -623,15 +639,15 @@ void loop() {
   }
 
   // ===== Endpoint CSV /csv =====
-  if (requestLine.indexOf("GET /csv") >= 0) {
-    if (!spiffsOk || !SPIFFS.exists(LOG_FILE)) {
-      client.println("HTTP/1.1 500 Internal Server Error");
-      client.println("Content-Type: text/plain");
-      client.println("Connection: close");
-      client.println();
-      client.println("Log no disponible");
-      client.stop();
-      return;
+    if (requestLine.startsWith("GET /csv ")) {
+        if (!spiffsOk || !SPIFFS.exists(LOG_FILE)) {
+          client.println("HTTP/1.1 500 Internal Server Error");
+          client.println("Content-Type: text/plain");
+          client.println("Connection: close");
+          client.println();
+          client.println("Log no disponible");
+          client.stop();
+          return;
     }
 
     File f = SPIFFS.open(LOG_FILE, "r");
@@ -663,7 +679,7 @@ void loop() {
   }
 
   // ===== Endpoint CLEAR CSV /clearcsv =====
-  if (requestLine.indexOf("GET /clearcsv") >= 0) {
+  if (requestLine.startsWith("GET /clearcsv ")) {
 
       if (spiffsOk && SPIFFS.exists(LOG_FILE)) {
           SPIFFS.remove(LOG_FILE);
@@ -689,6 +705,22 @@ void loop() {
       return;
   }
 
+  // ===== Endpoint CSV info (primer y último registro) =====
+  if (requestLine.startsWith("GET /csvinfo ")) {
+      String f1, f2;
+      obtenerFechasCSV(f1, f2);
+
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-Type: application/json");
+      client.println("Connection: close");
+      client.println();
+
+      client.print("{\"first\":\"" + f1 + "\",");
+      client.print("\"last\":\"" + f2 + "\"}");
+
+      client.stop();
+      return;
+  }
 
   // ===== Página principal (HTML) =====
   client.println("HTTP/1.1 200 OK");
@@ -697,6 +729,8 @@ void loop() {
   client.println();
 
   client.println(R"rawliteral(
+<!-- ============================================================================================= -->
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -892,81 +926,6 @@ void loop() {
 
 
 <!-- ============================================================================================= -->
-
-<!-- ===== CONTENEDOR DE BOTONES SUPERIORES ===== -->
-<div style="
-    position:absolute;
-    top:25px;
-    right:40px;
-    display:flex;
-    gap:18px;
-    z-index:50;
-">
-
-    <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
-<button id="btnClear"
-    style="
-        width:57px;
-        height:57px;
-        border-radius:50%;
-        background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
-        backdrop-filter: blur(6px);
-        border:1px solid rgba(120,0,0,0.55);
-        cursor:pointer;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        gap:2px;
-        box-shadow:
-            0 4px 14px rgba(0,0,0,0.50),
-            inset 0 0 10px rgba(180,0,0,0.25);
-        transition:0.25s ease;
-    "
-    onmouseover="this.style.transform='scale(1.12)'"
-    onmouseout="this.style.transform='scale(1)'"
->
-    <span class="material-symbols-rounded"
-        style="font-size:30px; color:#7A2626;">
-        delete
-    </span>
-    <span style="font-size:9px; color:#D45A5A;">CLEAR</span>
-</button>
-
-
-<!-- ========== BOTÓN CSV (VERDE) ========== -->
-<button id="btnCSV"
-    style="
-        width:57px;
-        height:57px;
-        border-radius:50%;
-        background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
-        backdrop-filter: blur(6px);
-        border:1px solid rgba(0,100,0,0.55);
-        cursor:pointer;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        gap:2px;
-        box-shadow:
-            0 4px 14px rgba(0,0,0,0.50),
-            inset 0 0 10px rgba(0,160,0,0.25);
-        transition:0.25s ease;
-    "
-    onmouseover="this.style.transform='scale(1.12)'"
-    onmouseout="this.style.transform='scale(1)'"
->
-    <span class="material-symbols-rounded"
-        style="font-size:30px; color:#0A3F1E;">
-        table
-    </span>
-
-    <span style="font-size:9px; color:#47B676;">.CSV</span>
-</button>
-
-
-</div>
 
 
 <!-- ============================================================================================= -->
@@ -1323,15 +1282,114 @@ function actualizarDatos(){
         });
 }
 
+
 window.onload = function(){
     crearGraficos();
     setInterval(actualizarDatos,2000);
 
-    // Botón para descargar el CSV completo almacenado en el ESP
-    document.getElementById("btnCSV").addEventListener("click", function(){
-        window.location.href = "/csv";
-    });
 };
+
+
+function cargarInfoCSV() {
+    fetch("/csvinfo")
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById("csvFirst").textContent = d.first || "--/--/----";
+            document.getElementById("csvLast").textContent  = d.last  || "--/--/----";
+        });
+}
+
+setInterval(cargarInfoCSV, 5000);
+cargarInfoCSV();
+
+
+</script>
+
+
+<!-- ===== TARJETA DE INFORME DEL CSV ===== -->
+<div class="panel" style="max-width:450px; margin:35px auto; background:#11131d; text-align:center;">
+
+    <h2 style="text-align:center; margin-bottom:15px;">Historial CSV</h2>
+
+    <div style="margin-bottom:8px;">
+        <strong>Primer registro:</strong>
+        <span id="csvFirst">--/--/----</span>
+    </div>
+
+    <div style="margin-bottom:15px;">
+        <strong>Último registro:</strong>
+        <span id="csvLast">--/--/----</span>
+    </div>
+
+    <div style="display:flex; justify-content:center; gap:25px; margin-top:20px;">
+
+        <!-- ========== BOTÓN CLEAR (ROJO) ========== -->
+        <button id="btnClear"
+            style="
+                width:70px;
+                height:70px;
+                border-radius:50%;
+                background: radial-gradient(circle, rgba(60,0,0,0.15), rgba(25,0,0,0.42));
+                backdrop-filter: blur(6px);
+                border:1px solid rgba(120,0,0,0.55);
+                cursor:pointer;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                gap:4px;
+                box-shadow:0 4px 14px rgba(0,0,0,0.50),
+                           inset 0 0 10px rgba(180,0,0,0.25);
+                transition:0.25s ease;
+            "
+            onmouseover="this.style.transform='scale(1.1)'"
+            onmouseout="this.style.transform='scale(1)'"
+        >
+            <span class="material-symbols-rounded"
+                style="font-size:33px; color:#7A2626;">
+                delete
+            </span>
+            <span style="font-size:9px; color:#D45A5A;">CLEAR</span>
+        </button>
+
+        <!-- ========== BOTÓN CSV (VERDE) ========== -->
+        <button id="btnCSV"
+            style="
+                width:70px;
+                height:70px;
+                border-radius:50%;
+                background: radial-gradient(circle, rgba(0,60,0,0.15), rgba(0,25,0,0.42));
+                backdrop-filter: blur(6px);
+                border:1px solid rgba(0,100,0,0.55);
+                cursor:pointer;
+                display:flex;
+                flex-direction:column;
+                align-items:center;
+                justify-content:center;
+                gap:4px;
+                box-shadow:0 4px 14px rgba(0,0,0,0.50),
+                           inset 0 0 10px rgba(0,160,0,0.25);
+                transition:0.25s ease;
+            "
+            onmouseover="this.style.transform='scale(1.1)'"
+            onmouseout="this.style.transform='scale(1)'"
+        >
+            <span class="material-symbols-rounded"
+                style="font-size:33px; color:#0A3F1E;">
+                table
+            </span>
+            <span style="font-size:9px; color:#47B676;">.CSV</span>
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+document.getElementById("btnCSV").addEventListener("click", function(){
+    window.location.href = "/csv";
+});
 
 document.getElementById("btnClear").addEventListener("click", function(){
     if (confirm("¿Seguro que deseas borrar TODO el historial del CSV?")) {
@@ -1340,11 +1398,14 @@ document.getElementById("btnClear").addEventListener("click", function(){
             .catch(()=> alert("Error al borrar el CSV."));
     }
 });
-
 </script>
 
 </body>
 </html>
+
+
+
+<!-- ============================================================================================= -->
 
 )rawliteral");
 
