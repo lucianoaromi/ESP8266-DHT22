@@ -3,9 +3,14 @@
 #include <DHT.h>
 #include <time.h>
 #include <FS.h>           // SPIFFS para almacenamiento interno
-#include <math.h>         // para isnan
 
-#include <ESP.h>
+// ===== NUEVO: LCD I2C =====
+#include <Wire.h>
+#include <LCD.h>
+#include <LiquidCrystal_I2C.h>
+
+// DIR, E, RW, RS, D4, D5, D6, D7 (igual que en tu UNO)
+LiquidCrystal_I2C lcd (0x27, 2, 1, 0, 4, 5, 6, 7);
 
 // =============================
 // CONFIG WIFI
@@ -20,14 +25,9 @@ const char* password = "Dr4Y0l4nd4G0nz4l3z";
 #define DHTTYPE DHT22
 DHT dht(SENSOR, DHTTYPE);
 
-// Variables globales (valor crudo promediado)
+// Variables globales
 float TEMPERATURA = 0;
 float HUMEDAD     = 0;
-
-// *** CAMBIO: variables filtradas (suavizadas) ***
-float tempFiltrada = NAN;
-float humFiltrada  = NAN;
-const float ALPHA_FILTRO = 0.2;   // 0.1 = más suave, 0.5 = más rápido
 
 float tempMax = -100, tempMin = 200;
 float humMax  = 0,    humMin  = 100;
@@ -37,9 +37,8 @@ unsigned long lastRead = 0;
 // =============================
 // INTERVALOS DE TIEMPO
 // =============================
-// *** CAMBIO: lecturas menos frecuentes para que no cambie tan rápido ***
-const unsigned long READ_INTERVAL_MS      = 10000UL;  // 10 segundos
-const unsigned long HIST_MINUTE_INTERVAL  = 60000UL;  // 1 minuto (igual)
+const unsigned long READ_INTERVAL_MS      = 5000UL;   // 5 segundos
+const unsigned long HIST_MINUTE_INTERVAL  = 60000UL;  // 1 minuto
 const unsigned long CSV_SAVE_INTERVAL_MS  = 300000UL; // 5 minutos
 
 // =============================
@@ -54,28 +53,13 @@ int   histIndex = 0;  // índice circular
 unsigned long lastHistMinute = 0;   // para el gráfico (1 minuto)
 unsigned long lastCsvSave    = 0;   // para el archivo CSV (5 minutos)
 
-
-// =============================
-// ACUMULADORES ESTILO ESTACIÓN METEO
-// =============================
-
-// Para promedio de 1 minuto (gráfico 1h)
-float minTempSum = 0;
-float minHumSum  = 0;
-uint16_t minCount = 0;
-
-// Para promedio de 5 minutos (CSV)
-float csvTempSum = 0;
-float csvHumSum  = 0;
-uint16_t csvCount = 0;
-
 // =============================
 // TELEGRAM CONFIG
 // =============================
 const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
 const String CHAT_ID        = "5144677839";
 
-const float ALERTA_TEMP = 25.0;              // UMBRAL DE ALERTA
+const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
 unsigned long lastAlert = 0;                 // tiempo del último aviso
 const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
 
@@ -133,41 +117,25 @@ String urlEncode(const String &text) {
 // =============================
 // ENVIAR MENSAJE TELEGRAM
 // =============================
-void enviarTelegram(const String &mensaje, bool forzar) {
-  size_t heapLibre = ESP.getFreeHeap();
-
-  // Solo saltamos si NO es forzado (inicio, avisos menores)
-  if (!forzar && heapLibre < 15000) {
-    Serial.printf("⚠ Heap muy bajo (%u bytes). Se omite envio NO crítico a Telegram.\n",
-                  heapLibre);
-    return;
-  }
-
+void enviarTelegram(const String &mensaje) {
   WiFiClientSecure client;
+
   client.setInsecure();
   client.setTimeout(5000);
+  client.setBufferSizes(512, 512);  // Ajuste importante en ESP8266
 
-  // Buffers más pequeños para ahorrar RAM
-  client.setBufferSizes(128, 384);
-
-  Serial.printf("Heap libre antes de Telegram: %u bytes\n", ESP.getFreeHeap());
   Serial.println("📡 Conectando a Telegram...");
 
   if (!client.connect("api.telegram.org", 443)) {
     Serial.println("❌ Error conectando a Telegram");
-    Serial.printf("Heap libre tras fallo: %u bytes\n", ESP.getFreeHeap());
-    client.stop();
     return;
   }
 
   delay(150); // Telegram lo necesita
 
-  String url = "/bot";
-  url += TELEGRAM_TOKEN;
-  url += "/sendMessage?chat_id=";
-  url += CHAT_ID;
-  url += "&text=";
-  url += urlEncode(mensaje);
+  String url = "/bot" + TELEGRAM_TOKEN +
+               "/sendMessage?chat_id=" + CHAT_ID +
+               "&text=" + urlEncode(mensaje);
 
   client.print(
     String("GET ") + url + " HTTP/1.1\r\n" +
@@ -178,6 +146,7 @@ void enviarTelegram(const String &mensaje, bool forzar) {
 
   Serial.println("📨 Enviando mensaje a Telegram...");
 
+  // Leer solo la primera línea de respuesta
   String line = client.readStringUntil('\n');
   if (line.startsWith("HTTP/1.1 200")) {
     Serial.println("✅ Telegram enviado correctamente");
@@ -186,26 +155,6 @@ void enviarTelegram(const String &mensaje, bool forzar) {
   }
 
   client.stop();
-  Serial.printf("Heap libre después de Telegram: %u bytes\n", ESP.getFreeHeap());
-}
-
-
-
-
-// =============================
-// FILTRO EXPONENCIAL SUAVIZADO
-// =============================
-// *** NUEVO ***
-void actualizarFiltro() {
-  if (isnan(tempFiltrada) || isnan(humFiltrada)) {
-    // Primera vez: tomamos el valor directamente
-    tempFiltrada = TEMPERATURA;
-    humFiltrada  = HUMEDAD;
-  } else {
-    // EWMA: nuevo = ALPHA * actual + (1-ALPHA) * anterior
-    tempFiltrada = ALPHA_FILTRO * TEMPERATURA + (1.0 - ALPHA_FILTRO) * tempFiltrada;
-    humFiltrada  = ALPHA_FILTRO * HUMEDAD     + (1.0 - ALPHA_FILTRO) * humFiltrada;
-  }
 }
 
 // =============================
@@ -213,10 +162,7 @@ void actualizarFiltro() {
 // =============================
 bool leerDHT() {
   float sumaT = 0, sumaH = 0;
-
-  // *** CAMBIO: más muestras para promediar ***
-  int muestras = 10;   // antes: 5
-  int validas  = 0;
+  int muestras = 5, validas = 0;
 
   for (int i = 0; i < muestras; i++) {
     float t = dht.readTemperature();
@@ -227,9 +173,7 @@ bool leerDHT() {
       sumaH += h;
       validas++;
     }
-
-    // *** CAMBIO: más tiempo entre lecturas dentro del promedio ***
-    delay(50); // 10 muestras x 50 ms ≈ 500 ms
+    delay(10);
   }
 
   if (validas == 0) return false;
@@ -237,7 +181,7 @@ bool leerDHT() {
   TEMPERATURA = sumaT / validas;
   HUMEDAD     = sumaH / validas;
 
-  // Corrección de sensores (igual que antes)
+  // Corrección de sensores
   HUMEDAD     = HUMEDAD - 9.0;
   TEMPERATURA = TEMPERATURA - 0.8;
 
@@ -245,18 +189,11 @@ bool leerDHT() {
   if (HUMEDAD < 0)   HUMEDAD = 0;
   if (HUMEDAD > 100) HUMEDAD = 100;
 
-  // *** NUEVO: aplicar filtro suavizado a partir del valor corregido ***
-  actualizarFiltro();
+  if (TEMPERATURA > tempMax) tempMax = TEMPERATURA;
+  if (TEMPERATURA < tempMin) tempMin = TEMPERATURA;
 
-  // Usamos las variables filtradas para min/max
-  float tUso = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
-  float hUso = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
-
-  if (tUso > tempMax) tempMax = tUso;
-  if (tUso < tempMin) tempMin = tUso;
-
-  if (hUso > humMax) humMax = hUso;
-  if (hUso < humMin) humMin = hUso;
+  if (HUMEDAD > humMax) humMax = HUMEDAD;
+  if (HUMEDAD < humMin) humMin = HUMEDAD;
 
   return true;
 }
@@ -330,74 +267,32 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
 
 // =============================
 // GUARDAR MUESTRA EN HISTORIAL
-//   - t, h: valor FILTRADO de esa lectura
-//   - armamos:
-//        → promedio de 1 min para la 1h
-//        → promedio de 5 min para el CSV
 // =============================
-void actualizarHistorial(float t, float h) {
+void actualizarHistorial() {
   unsigned long ahora = millis();
 
-  // Acumular lecturas para el minuto actual
-  minTempSum += t;
-  minHumSum  += h;
-  minCount++;
-
-  // ¿Ya pasó 1 minuto? → cerramos promedio de ese minuto
+  // Historial en RAM (gráfico 1 hora) → cada 1 minuto
   if (ahora - lastHistMinute >= HIST_MINUTE_INTERVAL) {
     lastHistMinute = ahora;
 
-    if (minCount > 0) {
-      // Promedio de 1 minuto
-      float tMin = minTempSum / minCount;
-      float hMin = minHumSum  / minCount;
+    histTemp[histIndex] = TEMPERATURA;
+    histHum[histIndex]  = HUMEDAD;
 
-      // Guardar en historial de 1 hora (60 puntos = 60 min)
-      histTemp[histIndex] = tMin;
-      histHum[histIndex]  = hMin;
-
-      histIndex = (histIndex + 1) % HOUR_POINTS;
-      if (histCount < HOUR_POINTS) histCount++;
-
-      // Acumular estos promedios de 1 min para el CSV de 5 min
-      csvTempSum += tMin;
-      csvHumSum  += hMin;
-      csvCount++;
-
-      // Reiniciar acumuladores de minuto
-      minTempSum = 0;
-      minHumSum  = 0;
-      minCount   = 0;
-    }
+    histIndex = (histIndex + 1) % HOUR_POINTS;
+    if (histCount < HOUR_POINTS) histCount++;
   }
 
-  // ¿Ya pasaron 5 minutos? → cerramos promedio para CSV
+  // Guardar CSV → cada 5 minutos
   if (ahora - lastCsvSave >= CSV_SAVE_INTERVAL_MS) {
     lastCsvSave = ahora;
-
-    if (csvCount > 0) {
-      // Promedio de 5 minutos (a partir de 5 promedios de 1 minuto)
-      float tCsv = csvTempSum / csvCount;
-      float hCsv = csvHumSum  / csvCount;
-
-      String fecha = obtenerFechaHora();
-      agregarRegistroLog(fecha, tCsv, hCsv);
-
-      // Reiniciar acumuladores de CSV
-      csvTempSum = 0;
-      csvHumSum  = 0;
-      csvCount   = 0;
-    }
+    String fecha = obtenerFechaHora();
+    agregarRegistroLog(fecha, TEMPERATURA, HUMEDAD);
   }
 }
 
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
 // ==========================================================
-// (TODO LO DE LA LUNA QUEDA IGUAL QUE EN TU CÓDIGO)
-// ... edadLunar(), fechaFutura(), calcularLunas(), faseLunar(),
-// faseNombre(), faseIcono() SIN CAMBIOS ...
-
 double edadLunar() {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
@@ -504,6 +399,17 @@ void setup() {
   Serial.begin(115200);
   dht.begin();
 
+  // ===== NUEVO: I2C + LCD =====
+  Wire.begin(D2, D1);               // SDA = D2, SCL = D1
+  lcd.setBacklightPin(3, POSITIVE);
+  lcd.setBacklight(HIGH);
+  lcd.begin(16, 2);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Monitor Ambiente");
+  lcd.setCursor(0, 1);
+  lcd.print("Iniciando...");
+
   // Conexión WiFi
   WiFi.begin(ssid, password);
   Serial.print("Conectando a WiFi...");
@@ -537,15 +443,16 @@ void setup() {
   server.begin();
 
   // Enviar primer mensaje a Telegram cuando todo ya está listo
-enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString(),
-            false);  // NO crítico, se puede omitir si hay poca RAM
+  enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 
+  // Mensaje inicial en LCD terminado
+  delay(1000);
+  lcd.clear();
 }
 
 // ==========================================================
 //      OBTENER FECHA INICIAL Y FINAL DEL CSV EXISTENTE
 // ==========================================================
-// (Estas funciones quedan igual que en tu código)
 String obtenerNombreCSV() {
   if (!SPIFFS.exists(LOG_FILE)) return "historial_vacio.csv";
 
@@ -561,15 +468,21 @@ String obtenerNombreCSV() {
   while (f.available()) {
     linea = f.readStringUntil('\n');
 
+    // saltar cabecera
     if (esCabecera) {
       esCabecera = false;
       continue;
     }
 
+    // línea con contenido real
     if (linea.length() > 5) {
+
+      // tomar primera fecha válida
       if (primeraFecha == "") {
         primeraFecha = linea.substring(0, 10);  // dd/mm/yyyy
       }
+
+      // actualizar última fecha cada vez
       ultimaFecha = linea.substring(0, 10);
     }
   }
@@ -579,6 +492,7 @@ String obtenerNombreCSV() {
   if (primeraFecha == "" || ultimaFecha == "")
     return "historial_sin_datos.csv";
 
+  // Convertir dd/mm/yyyy → yyyymmdd
   auto normalizar = [](String f) {
     String d = f.substring(0,2);
     String m = f.substring(3,5);
@@ -592,6 +506,10 @@ String obtenerNombreCSV() {
   return "historial_" + f1 + "_" + f2 + ".csv";
 }
 
+
+// ==========================================================
+//  OBTENER FECHA PRIMERA Y ÚLTIMA LÍNEA DEL CSV
+// ==========================================================
 void obtenerFechasCSV(String &primera, String &ultima) {
   primera = "";
   ultima  = "";
@@ -626,35 +544,40 @@ void obtenerFechasCSV(String &primera, String &ultima) {
 void loop() {
   unsigned long ahora = millis();
 
-  // *** CAMBIO: leer más espaciado + usar valor filtrado ***
+  // Leer cada 5 segundos
   if (ahora - lastRead > READ_INTERVAL_MS) {
     lastRead = ahora;
 
     if (leerDHT()) {
-      float tUso = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
-      float hUso = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
+      Serial.printf("Temp: %.1f C | Hum: %.1f %%\n", TEMPERATURA, HUMEDAD);
 
-      Serial.printf("Temp (filtrada): %.1f C | Hum (filtrada): %.1f %%\n", tUso, hUso);
+      // ===== NUEVO: mostrar en LCD =====
+      lcd.setCursor(0, 0);
+      lcd.print("Temp: ");
+      lcd.print(TEMPERATURA, 1);
+      lcd.print((char)223);  // símbolo ° (puede variar según LCD)
+      lcd.print("C   ");     // espacios para borrar restos
 
-      // Actualizar historial de 1 hora + log en SPIFFS con valores filtrados
-      actualizarHistorial(tUso, hUso);
+      lcd.setCursor(0, 1);
+      lcd.print("Hum: ");
+      lcd.print(HUMEDAD, 1);
+      lcd.print("%   ");
 
-      // Alerta por temperatura (usamos filtrada para que no salte por ruido)
-      if (tUso >= ALERTA_TEMP &&
+      // Actualizar historial de 1 hora + log en SPIFFS
+      actualizarHistorial();
+
+      // Alerta por temperatura
+      if (TEMPERATURA >= ALERTA_TEMP &&
           (lastAlert == 0 || (ahora - lastAlert > ALERT_INTERVAL))) {
 
         lastAlert = ahora;
 
-        String alerta;
-        alerta.reserve(160);  // evitamos reallocs y fragmentación
+        String alerta = "ALERTA: Temperatura alta!\n";
+        alerta += "🌡 Temp: " + String(TEMPERATURA) + " °C\n";
+        alerta += "💧 Hum: " + String(HUMEDAD) + " %\n";
+        alerta += "🕒 " + obtenerFechaHora();
 
-        alerta  = "ALERTA: Temperatura alta!\n";
-        alerta += "Temp: " + String(TEMPERATURA, 1) + " C\n";
-        alerta += "Hum: "  + String(HUMEDAD, 1)     + " %\n";
-        alerta += "Hora: " + obtenerFechaHora();
-
-        enviarTelegram(alerta, true);
-
+        enviarTelegram(alerta);
       }
     }
   }
@@ -686,19 +609,15 @@ void loop() {
   if (requestLine.indexOf("GET /data") >= 0) {
     String fechaHora = obtenerFechaHora();
 
-    // *** NUEVO: elegir lo que se manda: filtrado si existe, sino crudo ***
-    float tOut = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
-    float hOut = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
-
     client.println("HTTP/1.1 200 OK");
     client.println("Content-Type: application/json");
     client.println("Connection: close");
     client.println();
 
     client.print("{\"temp\":");
-    client.print(tOut, 1);
+    client.print(TEMPERATURA, 1);
     client.print(",\"hum\":");
-    client.print(hOut, 1);
+    client.print(HUMEDAD, 1);
     client.print(",\"tmin\":");
     client.print(tempMin, 1);
     client.print(",\"tmax\":");
@@ -728,7 +647,7 @@ void loop() {
     client.print(lunaLlena);
     client.print("\"");
 
-    // Historial 1h (ya está filtrado porque lo guardamos así)
+    // Historial 1h
     client.print(",\"histT\":[");
     for (int i = 0; i < histCount; i++) {
       int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
@@ -790,10 +709,12 @@ void loop() {
 
   // ===== Endpoint CLEAR CSV /clearcsv =====
   if (requestLine.startsWith("GET /clearcsv ")) {
+
     if (spiffsOk && SPIFFS.exists(LOG_FILE)) {
       SPIFFS.remove(LOG_FILE);
     }
 
+    // Crear archivo vacío nuevamente
     File nf = SPIFFS.open(LOG_FILE, "w");
     if (nf) {
       nf.println("FechaHora,Temperatura,Hum.edad");
@@ -831,18 +752,14 @@ void loop() {
   }
 
   // ===== Página principal (HTML) =====
-  // ACA VA TU R"rawliteral( ... )rawliteral" DEL HTML TAL CUAL LO TENÉS
-  // NO HACE FALTA MODIFICARLO.
-
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
   client.println();
 
   client.println(R"rawliteral(
-
-
 <!-- ============================================================================================= -->
+
 
 
 <!DOCTYPE html>
@@ -1228,51 +1145,6 @@ void loop() {
             background: #11131d;
             text-align: center;
             padding: 8px 10px;
-            display: block;
-        }
-
-        #panel-weatherapi {
-            display: block;
-            max-width: 220px;
-            width: clamp(180px, 52%, 220px);
-            margin: 14px auto;
-        }
-
-        .section-title.section-title-center {
-            justify-content: center;
-            text-align: center;
-        }
-
-        .weather-content {
-            text-align: center;
-        }
-
-        #weather-error {
-            display: none;
-            color: #ff8080;
-        }
-
-        #weather-data {
-            display: none;
-        }
-
-        .label-note {
-            font-size: 12px;
-            color: #aaa;
-        }
-
-        .weather-actions {
-            margin-top: 10px;
-        }
-
-        #weather-refresh {
-            border-radius: 16px;
-            padding: 6px 14px;
-            border: none;
-            background: #1e88e5;
-            color: #fff;
-            cursor: pointer;
-            min-width: 120px;
         }
 
         .csv-title {
@@ -1784,59 +1656,7 @@ void loop() {
         }
     </script>
 
-   <!-- -------------------------------------------------------------------------------------------------->
-
-<!-- ===== NUEVO PANEL: CLIMA CORRIENTES (WEATHERAPI) ===== -->
-<div class="panel" id="panel-weatherapi">
-    
-    <!-- Título centrado -->
-    <h2 class="section-title section-title-center">
-        <span class="icon icon-temp">cloud</span>
-        Clima Corrientes (API)
-    </h2>
-
-    <!-- Contenido centrado -->
-    <div class="weather-content">
-        <!-- Estado: cargando / error / datos -->
-        <div id="weather-loading" class="label">
-            Cargando datos de WeatherAPI...
-        </div>
-
-        <div id="weather-error" class="label">
-            Error al obtener datos del clima.
-        </div>
-
-        <div id="weather-data">
-            <div class="label">
-                Temp API:
-                <span id="weather-temp" class="value">--.-</span> °C
-            </div>
-            <div class="label">
-                Humedad API:
-                <span id="weather-hum" class="value">--</span> %
-            </div>
-            <div class="label">
-                Presión API:
-                <span id="weather-pres" class="value">----</span> hPa
-            </div>
-            <div class="label label-note">
-                Actualizado:
-                <span id="weather-updated">--/--/---- --:--</span>
-            </div>
-        </div>
-
-        <!-- Botón centrado -->
-        <div class="weather-actions">
-            <button id="weather-refresh">
-                Actualizar clima
-            </button>
-        </div>
-    </div>
-</div>
-
-
-
-    <!-- ===== TARJETA DE INFORME DEL CSV (ABAJO) ===== -->
+    <!-- ===== TARJETA DE INFORME DEL CSV ===== -->
     <div class="panel panel-csv">
         <h2 class="csv-title">Historial CSV</h2>
 
@@ -1867,7 +1687,6 @@ void loop() {
 
     <div class="footer">by: Luciano Aromi</div>
 
-    <!-- Script botones CSV / Clear -->
     <script>
         document.getElementById('btnCSV').addEventListener('click', function () {
             window.location.href = '/csv';
@@ -1881,101 +1700,12 @@ void loop() {
             }
         });
     </script>
+</body>
+</html>
 
-    <!-- ===== SCRIPT: WEATHERAPI SOLO T/H/Presión ===== -->
-    <script>
-        const WEATHER_API_KEY   = '9ff16c4a57b4424e947202117251907'; // tu key
-        const WEATHER_CITY      = 'Corrientes,Argentina';
-
-        function formatWeatherDate(dateString) {
-            const d = new Date(dateString);
-            return new Intl.DateTimeFormat('es-AR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            }).format(d);
-        }
-
-        async function fetchWeatherAPI() {
-            const loadingEl = document.getElementById('weather-loading');
-            const errorEl   = document.getElementById('weather-error');
-            const dataEl    = document.getElementById('weather-data');
-
-            if (loadingEl) loadingEl.style.display = 'block';
-            if (errorEl)   errorEl.style.display   = 'none';
-            if (dataEl)    dataEl.style.display    = 'none';
-
-            if (!WEATHER_API_KEY || WEATHER_API_KEY === 'TU_API_KEY') {
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (errorEl) {
-                    errorEl.textContent = 'API key de WeatherAPI no configurada.';
-                    errorEl.style.display = 'block';
-                }
-                return;
-            }
-
-            const url = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(WEATHER_CITY)}&lang=es&aqi=no`;
-
-            try {
-                const resp = await fetch(url);
-                if (!resp.ok) {
-                    throw new Error('HTTP ' + resp.status);
-                }
-
-                const json = await resp.json();
-                const cur  = json.current;
-
-                const t = Math.round(cur.temp_c);
-                const h = cur.humidity;
-                const p = cur.pressure_mb;
-
-                const tEl = document.getElementById('weather-temp');
-                const hEl = document.getElementById('weather-hum');
-                const pEl = document.getElementById('weather-pres');
-                const uEl = document.getElementById('weather-updated');
-
-                if (tEl) tEl.textContent = t.toFixed(0);
-                if (hEl) hEl.textContent = h;
-                if (pEl) pEl.textContent = p;
-                if (uEl) uEl.textContent = formatWeatherDate(cur.last_updated);
-
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (dataEl)    dataEl.style.display    = 'block';
-
-            } catch (e) {
-                console.error('Error WeatherAPI:', e);
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (errorEl) {
-                    errorEl.textContent = 'Error al obtener clima: ' + e.message;
-                    errorEl.style.display = 'block';
-                }
-            }
-        }
-
-        window.addEventListener('load', () => {
-            fetchWeatherAPI();
-
-            const btn = document.getElementById('weather-refresh');
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    fetchWeatherAPI();
-                });
-            }
-
-            // Si querés auto-actualizar cada 10 minutos:
-            // setInterval(fetchWeatherAPI, 10 * 60 * 1000);
-        });
-    </script>
-    </body>
-    </html>
 
 
 <!-- ============================================================================================= -->
-
-
-  )rawliteral");
-
+)rawliteral");
   client.stop();
 }
