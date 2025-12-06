@@ -1,11 +1,10 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
+#include <ESP8266HTTPClient.h>
 #include <DHT.h>
 #include <time.h>
-#include <FS.h>           // SPIFFS para almacenamiento interno
-#include <math.h>         // para isnan
-
-#include <ESP.h>
+#include <FS.h>
+#include <math.h>
 
 // =============================
 // CONFIG WIFI
@@ -24,7 +23,7 @@ DHT dht(SENSOR, DHTTYPE);
 float TEMPERATURA = 0;
 float HUMEDAD     = 0;
 
-// *** CAMBIO: variables filtradas (suavizadas) ***
+// Variables filtradas (suavizadas)
 float tempFiltrada = NAN;
 float humFiltrada  = NAN;
 const float ALPHA_FILTRO = 0.2;   // 0.1 = más suave, 0.5 = más rápido
@@ -37,9 +36,8 @@ unsigned long lastRead = 0;
 // =============================
 // INTERVALOS DE TIEMPO
 // =============================
-// *** CAMBIO: lecturas menos frecuentes para que no cambie tan rápido ***
 const unsigned long READ_INTERVAL_MS      = 10000UL;  // 10 segundos
-const unsigned long HIST_MINUTE_INTERVAL  = 60000UL;  // 1 minuto (igual)
+const unsigned long HIST_MINUTE_INTERVAL  = 60000UL;  // 1 minuto
 const unsigned long CSV_SAVE_INTERVAL_MS  = 300000UL; // 5 minutos
 
 // =============================
@@ -53,7 +51,6 @@ int   histIndex = 0;  // índice circular
 
 unsigned long lastHistMinute = 0;   // para el gráfico (1 minuto)
 unsigned long lastCsvSave    = 0;   // para el archivo CSV (5 minutos)
-
 
 // =============================
 // ACUMULADORES ESTILO ESTACIÓN METEO
@@ -70,12 +67,24 @@ float csvHumSum  = 0;
 uint16_t csvCount = 0;
 
 // =============================
+// LED + WeatherAPI
+// =============================
+const uint8_t LED_API = D6;  // LED con resistencia a este pin
+
+float tempApi = NAN;               // última temperatura desde la API
+unsigned long lastWeatherCheck = 0;
+const unsigned long WEATHER_INTERVAL = 30000UL; // cada 10 minutos
+
+const char* WEATHER_API_KEY = "9ff16c4a57b4424e947202117251907";
+const char* WEATHER_CITY    = "Corrientes,Argentina";
+
+// =============================
 // TELEGRAM CONFIG
 // =============================
 const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
 const String CHAT_ID        = "5144677839";
 
-const float ALERTA_TEMP = 25.0;              // UMBRAL DE ALERTA
+const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
 unsigned long lastAlert = 0;                 // tiempo del último aviso
 const unsigned long ALERT_INTERVAL = 300000; // 5 MINUTOS
 
@@ -85,7 +94,7 @@ WiFiServer server(80);
 // LOG EN SPIFFS (HASTA ~1 MES)
 // =============================
 const char* LOG_FILE = "/historial.csv";
-const unsigned long MAX_LOG_LINES = 8640UL; // 24 × 60 / 5 * 30 (1 por 5 minutos, 30 días aprox)
+const unsigned long MAX_LOG_LINES = 8640UL; // 24 × 60 / 5 * 30
 bool spiffsOk = false;
 unsigned long logLines = 0;
 
@@ -118,9 +127,9 @@ String urlEncode(const String &text) {
 
   for (int i = 0; i < text.length(); i++) {
     c = text.charAt(i);
-    if ( ('a' <= c && c <= 'z') ||
-         ('A' <= c && c <= 'Z') ||
-         ('0' <= c && c <= '9') ) {
+    if (('a' <= c && c <= 'z') ||
+        ('A' <= c && c <= 'Z') ||
+        ('0' <= c && c <= '9')) {
       encoded += c;
     } else {
       sprintf(buf, "%%%02X", (unsigned char)c);
@@ -133,41 +142,25 @@ String urlEncode(const String &text) {
 // =============================
 // ENVIAR MENSAJE TELEGRAM
 // =============================
-void enviarTelegram(const String &mensaje, bool forzar) {
-  size_t heapLibre = ESP.getFreeHeap();
-
-  // Solo saltamos si NO es forzado (inicio, avisos menores)
-  if (!forzar && heapLibre < 15000) {
-    Serial.printf("⚠ Heap muy bajo (%u bytes). Se omite envio NO crítico a Telegram.\n",
-                  heapLibre);
-    return;
-  }
-
+void enviarTelegram(const String &mensaje) {
   WiFiClientSecure client;
+
   client.setInsecure();
   client.setTimeout(5000);
+  client.setBufferSizes(256, 384);  // más chico para ahorrar RAM
 
-  // Buffers más pequeños para ahorrar RAM
-  client.setBufferSizes(128, 384);
-
-  Serial.printf("Heap libre antes de Telegram: %u bytes\n", ESP.getFreeHeap());
   Serial.println("📡 Conectando a Telegram...");
 
   if (!client.connect("api.telegram.org", 443)) {
     Serial.println("❌ Error conectando a Telegram");
-    Serial.printf("Heap libre tras fallo: %u bytes\n", ESP.getFreeHeap());
-    client.stop();
     return;
   }
 
   delay(150); // Telegram lo necesita
 
-  String url = "/bot";
-  url += TELEGRAM_TOKEN;
-  url += "/sendMessage?chat_id=";
-  url += CHAT_ID;
-  url += "&text=";
-  url += urlEncode(mensaje);
+  String url = "/bot" + TELEGRAM_TOKEN +
+               "/sendMessage?chat_id=" + CHAT_ID +
+               "&text=" + urlEncode(mensaje);
 
   client.print(
     String("GET ") + url + " HTTP/1.1\r\n" +
@@ -186,23 +179,16 @@ void enviarTelegram(const String &mensaje, bool forzar) {
   }
 
   client.stop();
-  Serial.printf("Heap libre después de Telegram: %u bytes\n", ESP.getFreeHeap());
 }
-
-
-
 
 // =============================
 // FILTRO EXPONENCIAL SUAVIZADO
 // =============================
-// *** NUEVO ***
 void actualizarFiltro() {
   if (isnan(tempFiltrada) || isnan(humFiltrada)) {
-    // Primera vez: tomamos el valor directamente
     tempFiltrada = TEMPERATURA;
     humFiltrada  = HUMEDAD;
   } else {
-    // EWMA: nuevo = ALPHA * actual + (1-ALPHA) * anterior
     tempFiltrada = ALPHA_FILTRO * TEMPERATURA + (1.0 - ALPHA_FILTRO) * tempFiltrada;
     humFiltrada  = ALPHA_FILTRO * HUMEDAD     + (1.0 - ALPHA_FILTRO) * humFiltrada;
   }
@@ -213,9 +199,7 @@ void actualizarFiltro() {
 // =============================
 bool leerDHT() {
   float sumaT = 0, sumaH = 0;
-
-  // *** CAMBIO: más muestras para promediar ***
-  int muestras = 10;   // antes: 5
+  int muestras = 10;
   int validas  = 0;
 
   for (int i = 0; i < muestras; i++) {
@@ -227,9 +211,7 @@ bool leerDHT() {
       sumaH += h;
       validas++;
     }
-
-    // *** CAMBIO: más tiempo entre lecturas dentro del promedio ***
-    delay(50); // 10 muestras x 50 ms ≈ 500 ms
+    delay(50);
   }
 
   if (validas == 0) return false;
@@ -237,18 +219,14 @@ bool leerDHT() {
   TEMPERATURA = sumaT / validas;
   HUMEDAD     = sumaH / validas;
 
-  // Corrección de sensores (igual que antes)
   HUMEDAD     = HUMEDAD - 9.0;
   TEMPERATURA = TEMPERATURA - 0.8;
 
-  // Limitar valores
   if (HUMEDAD < 0)   HUMEDAD = 0;
   if (HUMEDAD > 100) HUMEDAD = 100;
 
-  // *** NUEVO: aplicar filtro suavizado a partir del valor corregido ***
   actualizarFiltro();
 
-  // Usamos las variables filtradas para min/max
   float tUso = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
   float hUso = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
 
@@ -288,7 +266,7 @@ void iniciarLog() {
 
   while (f.available()) {
     String line = f.readStringUntil('\n');
-    if (first) {          // saltar cabecera
+    if (first) {
       first = false;
       continue;
     }
@@ -330,60 +308,47 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
 
 // =============================
 // GUARDAR MUESTRA EN HISTORIAL
-//   - t, h: valor FILTRADO de esa lectura
-//   - armamos:
-//        → promedio de 1 min para la 1h
-//        → promedio de 5 min para el CSV
 // =============================
 void actualizarHistorial(float t, float h) {
   unsigned long ahora = millis();
 
-  // Acumular lecturas para el minuto actual
   minTempSum += t;
   minHumSum  += h;
   minCount++;
 
-  // ¿Ya pasó 1 minuto? → cerramos promedio de ese minuto
   if (ahora - lastHistMinute >= HIST_MINUTE_INTERVAL) {
     lastHistMinute = ahora;
 
     if (minCount > 0) {
-      // Promedio de 1 minuto
       float tMin = minTempSum / minCount;
       float hMin = minHumSum  / minCount;
 
-      // Guardar en historial de 1 hora (60 puntos = 60 min)
       histTemp[histIndex] = tMin;
       histHum[histIndex]  = hMin;
 
       histIndex = (histIndex + 1) % HOUR_POINTS;
       if (histCount < HOUR_POINTS) histCount++;
 
-      // Acumular estos promedios de 1 min para el CSV de 5 min
       csvTempSum += tMin;
       csvHumSum  += hMin;
       csvCount++;
 
-      // Reiniciar acumuladores de minuto
       minTempSum = 0;
       minHumSum  = 0;
       minCount   = 0;
     }
   }
 
-  // ¿Ya pasaron 5 minutos? → cerramos promedio para CSV
   if (ahora - lastCsvSave >= CSV_SAVE_INTERVAL_MS) {
     lastCsvSave = ahora;
 
     if (csvCount > 0) {
-      // Promedio de 5 minutos (a partir de 5 promedios de 1 minuto)
       float tCsv = csvTempSum / csvCount;
       float hCsv = csvHumSum  / csvCount;
 
       String fecha = obtenerFechaHora();
       agregarRegistroLog(fecha, tCsv, hCsv);
 
-      // Reiniciar acumuladores de CSV
       csvTempSum = 0;
       csvHumSum  = 0;
       csvCount   = 0;
@@ -394,10 +359,6 @@ void actualizarHistorial(float t, float h) {
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
 // ==========================================================
-// (TODO LO DE LA LUNA QUEDA IGUAL QUE EN TU CÓDIGO)
-// ... edadLunar(), fechaFutura(), calcularLunas(), faseLunar(),
-// faseNombre(), faseIcono() SIN CAMBIOS ...
-
 double edadLunar() {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
@@ -445,8 +406,8 @@ void calcularLunas(String &proximaNueva, String &proximaLlena) {
   double edad  = edadLunar();
   double ciclo = 29.53058867;
 
-  double dn = ciclo - edad;      // Días hasta próxima luna nueva
-  double dl = 14.765 - edad;     // Días hasta luna llena
+  double dn = ciclo - edad;
+  double dl = 14.765 - edad;
 
   if (dl < 0) dl += ciclo;
 
@@ -470,7 +431,7 @@ int faseLunar() {
 }
 
 String faseNombre(int f) {
-  switch(f) {
+  switch (f) {
     case 0: return "Luna nueva";
     case 1: return "Creciente cóncava";
     case 2: return "Cuarto creciente";
@@ -484,7 +445,7 @@ String faseNombre(int f) {
 }
 
 String faseIcono(int f) {
-  switch(f) {
+  switch (f) {
     case 0: return "🌑";
     case 1: return "🌘";
     case 2: return "🌗";
@@ -498,54 +459,79 @@ String faseIcono(int f) {
 }
 
 // =============================
-// SETUP
+// WeatherAPI → LED
 // =============================
-void setup() {
-  Serial.begin(115200);
-  dht.begin();
-
-  // Conexión WiFi
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando a WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println(" conectado!");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-
-  // NTP GMT-3 (Argentina)
-  configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-
-  // Inicializar historial en RAM
-  for (int i = 0; i < HOUR_POINTS; i++) {
-    histTemp[i] = NAN;
-    histHum[i]  = NAN;
+void actualizarClimaApi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[API] WiFi no conectado, no se consulta WeatherAPI.");
+    return;
   }
 
-  // Montar SPIFFS
-  if (SPIFFS.begin()) {
-    spiffsOk = true;
-    Serial.println("SPIFFS montado correctamente.");
-    iniciarLog();
+  WiFiClient client;
+  HTTPClient http;
+
+  String url = "http://api.weatherapi.com/v1/current.json?key=";
+  url += WEATHER_API_KEY;
+  url += "&q=";
+  url += WEATHER_CITY;
+  url += "&lang=es&aqi=no";
+
+  Serial.println("[API] Consultando WeatherAPI (solo temp_c)...");
+
+  if (!http.begin(client, url)) {
+    Serial.println("[API] Error en http.begin()");
+    return;
+  }
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.printf("[API] Error HTTP: %d\n", httpCode);
+    http.end();
+    return;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  int idx = payload.indexOf("\"temp_c\":");
+  if (idx < 0) {
+    Serial.println("[API] No se encontró 'temp_c' en la respuesta.");
+    return;
+  }
+  idx += 9;
+
+  int end = payload.indexOf(',', idx);
+  if (end < 0) {
+    Serial.println("[API] No se pudo aislar el valor de temp_c.");
+    return;
+  }
+
+  String tempStr = payload.substring(idx, end);
+  tempStr.trim();
+  float tExt = tempStr.toFloat();
+
+  if (tExt == 0 && tempStr.indexOf('0') == -1) {
+    Serial.println("[API] Conversión de temp_c a float dudosa.");
+    return;
+  }
+
+  tempApi = tExt;
+  Serial.printf("[API] Temp API = %.1f C\n", tempApi);
+
+  const float UMBRAL_LED = 23.0;
+
+  if (!isnan(tempApi) && tempApi >= UMBRAL_LED) {
+    digitalWrite(LED_API, HIGH);
+    Serial.println("[API] LED_API ON (temp_api >= umbral)");
   } else {
-    spiffsOk = false;
-    Serial.println("❌ Error montando SPIFFS.");
+    digitalWrite(LED_API, LOW);
+    Serial.println("[API] LED_API OFF (temp_api < umbral o dato inválido)");
   }
-
-  server.begin();
-
-  // Enviar primer mensaje a Telegram cuando todo ya está listo
-enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString(),
-            false);  // NO crítico, se puede omitir si hay poca RAM
-
 }
 
-// ==========================================================
-//      OBTENER FECHA INICIAL Y FINAL DEL CSV EXISTENTE
-// ==========================================================
-// (Estas funciones quedan igual que en tu código)
+// =============================
+// CSV nombre e info
+// =============================
 String obtenerNombreCSV() {
   if (!SPIFFS.exists(LOG_FILE)) return "historial_vacio.csv";
 
@@ -568,7 +554,7 @@ String obtenerNombreCSV() {
 
     if (linea.length() > 5) {
       if (primeraFecha == "") {
-        primeraFecha = linea.substring(0, 10);  // dd/mm/yyyy
+        primeraFecha = linea.substring(0, 10);
       }
       ultimaFecha = linea.substring(0, 10);
     }
@@ -580,9 +566,9 @@ String obtenerNombreCSV() {
     return "historial_sin_datos.csv";
 
   auto normalizar = [](String f) {
-    String d = f.substring(0,2);
-    String m = f.substring(3,5);
-    String y = f.substring(6,10);
+    String d = f.substring(0, 2);
+    String m = f.substring(3, 5);
+    String y = f.substring(6, 10);
     return y + m + d;
   };
 
@@ -613,11 +599,52 @@ void obtenerFechasCSV(String &primera, String &ultima) {
     }
 
     if (linea.length() > 5) {
-      if (primera == "") primera = linea.substring(0,10);
-      ultima = linea.substring(0,10);
+      if (primera == "") primera = linea.substring(0, 10);
+      ultima = linea.substring(0, 10);
     }
   }
   f.close();
+}
+
+// =============================
+// SETUP
+// =============================
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  pinMode(LED_API, OUTPUT);
+  digitalWrite(LED_API, LOW);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando a WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" conectado!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+
+  configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+
+  for (int i = 0; i < HOUR_POINTS; i++) {
+    histTemp[i] = NAN;
+    histHum[i]  = NAN;
+  }
+
+  if (SPIFFS.begin()) {
+    spiffsOk = true;
+    Serial.println("SPIFFS montado correctamente.");
+    iniciarLog();
+  } else {
+    spiffsOk = false;
+    Serial.println("❌ Error montando SPIFFS.");
+  }
+
+  server.begin();
+
+  enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
 }
 
 // =============================
@@ -626,7 +653,7 @@ void obtenerFechasCSV(String &primera, String &ultima) {
 void loop() {
   unsigned long ahora = millis();
 
-  // *** CAMBIO: leer más espaciado + usar valor filtrado ***
+  // Lectura DHT + alerta
   if (ahora - lastRead > READ_INTERVAL_MS) {
     lastRead = ahora;
 
@@ -636,27 +663,27 @@ void loop() {
 
       Serial.printf("Temp (filtrada): %.1f C | Hum (filtrada): %.1f %%\n", tUso, hUso);
 
-      // Actualizar historial de 1 hora + log en SPIFFS con valores filtrados
       actualizarHistorial(tUso, hUso);
 
-      // Alerta por temperatura (usamos filtrada para que no salte por ruido)
       if (tUso >= ALERTA_TEMP &&
           (lastAlert == 0 || (ahora - lastAlert > ALERT_INTERVAL))) {
 
         lastAlert = ahora;
 
-        String alerta;
-        alerta.reserve(160);  // evitamos reallocs y fragmentación
+        String alerta = "ALERTA: Temperatura alta!\n";
+        alerta += "🌡 Temp: " + String(tUso) + " °C\n";
+        alerta += "💧 Hum: " + String(hUso) + " %\n";
+        alerta += "🕒 " + obtenerFechaHora();
 
-        alerta  = "ALERTA: Temperatura alta!\n";
-        alerta += "Temp: " + String(TEMPERATURA, 1) + " C\n";
-        alerta += "Hum: "  + String(HUMEDAD, 1)     + " %\n";
-        alerta += "Hora: " + obtenerFechaHora();
-
-        enviarTelegram(alerta, true);
-
+        enviarTelegram(alerta);
       }
     }
+  }
+
+  // WeatherAPI cada X minutos
+  if (ahora - lastWeatherCheck >= WEATHER_INTERVAL) {
+    lastWeatherCheck = ahora;
+    actualizarClimaApi();
   }
 
   // =============================
@@ -674,7 +701,7 @@ void loop() {
   }
 
   String requestLine = client.readStringUntil('\r');
-  client.read(); // consumir '\n'
+  client.read(); // '\n'
 
   while (client.available()) {
     String header = client.readStringUntil('\r');
@@ -682,11 +709,10 @@ void loop() {
     if (header.length() == 1) break;
   }
 
-  // ===== Endpoint JSON /data =====
+  // /data
   if (requestLine.indexOf("GET /data") >= 0) {
     String fechaHora = obtenerFechaHora();
 
-    // *** NUEVO: elegir lo que se manda: filtrado si existe, sino crudo ***
     float tOut = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
     float hOut = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
 
@@ -712,7 +738,6 @@ void loop() {
     client.print("\",\"hcount\":");
     client.print(histCount);
 
-    // === FASE LUNAR ===
     int f = faseLunar();
     client.print(",\"moonIcon\":\"");
     client.print(faseIcono(f));
@@ -728,7 +753,6 @@ void loop() {
     client.print(lunaLlena);
     client.print("\"");
 
-    // Historial 1h (ya está filtrado porque lo guardamos así)
     client.print(",\"histT\":[");
     for (int i = 0; i < histCount; i++) {
       int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
@@ -748,7 +772,7 @@ void loop() {
     return;
   }
 
-  // ===== Endpoint CSV /csv =====
+  // /csv
   if (requestLine.startsWith("GET /csv ")) {
     if (!spiffsOk || !SPIFFS.exists(LOG_FILE)) {
       client.println("HTTP/1.1 500 Internal Server Error");
@@ -788,7 +812,7 @@ void loop() {
     return;
   }
 
-  // ===== Endpoint CLEAR CSV /clearcsv =====
+  // /clearcsv
   if (requestLine.startsWith("GET /clearcsv ")) {
     if (spiffsOk && SPIFFS.exists(LOG_FILE)) {
       SPIFFS.remove(LOG_FILE);
@@ -813,7 +837,7 @@ void loop() {
     return;
   }
 
-  // ===== Endpoint CSV info (primer y último registro) =====
+  // /csvinfo
   if (requestLine.startsWith("GET /csvinfo ")) {
     String f1, f2;
     obtenerFechasCSV(f1, f2);
@@ -830,10 +854,7 @@ void loop() {
     return;
   }
 
-  // ===== Página principal (HTML) =====
-  // ACA VA TU R"rawliteral( ... )rawliteral" DEL HTML TAL CUAL LO TENÉS
-  // NO HACE FALTA MODIFICARLO.
-
+  // Página principal (HTML simple de prueba)
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: text/html");
   client.println("Connection: close");
@@ -843,6 +864,7 @@ void loop() {
 
 
 <!-- ============================================================================================= -->
+
 
 
 <!DOCTYPE html>
@@ -1228,51 +1250,6 @@ void loop() {
             background: #11131d;
             text-align: center;
             padding: 8px 10px;
-            display: block;
-        }
-
-        #panel-weatherapi {
-            display: block;
-            max-width: 220px;
-            width: clamp(180px, 52%, 220px);
-            margin: 14px auto;
-        }
-
-        .section-title.section-title-center {
-            justify-content: center;
-            text-align: center;
-        }
-
-        .weather-content {
-            text-align: center;
-        }
-
-        #weather-error {
-            display: none;
-            color: #ff8080;
-        }
-
-        #weather-data {
-            display: none;
-        }
-
-        .label-note {
-            font-size: 12px;
-            color: #aaa;
-        }
-
-        .weather-actions {
-            margin-top: 10px;
-        }
-
-        #weather-refresh {
-            border-radius: 16px;
-            padding: 6px 14px;
-            border: none;
-            background: #1e88e5;
-            color: #fff;
-            cursor: pointer;
-            min-width: 120px;
         }
 
         .csv-title {
@@ -1784,59 +1761,7 @@ void loop() {
         }
     </script>
 
-   <!-- -------------------------------------------------------------------------------------------------->
-
-<!-- ===== NUEVO PANEL: CLIMA CORRIENTES (WEATHERAPI) ===== -->
-<div class="panel" id="panel-weatherapi">
-    
-    <!-- Título centrado -->
-    <h2 class="section-title section-title-center">
-        <span class="icon icon-temp">cloud</span>
-        Clima Corrientes (API)
-    </h2>
-
-    <!-- Contenido centrado -->
-    <div class="weather-content">
-        <!-- Estado: cargando / error / datos -->
-        <div id="weather-loading" class="label">
-            Cargando datos de WeatherAPI...
-        </div>
-
-        <div id="weather-error" class="label">
-            Error al obtener datos del clima.
-        </div>
-
-        <div id="weather-data">
-            <div class="label">
-                Temp API:
-                <span id="weather-temp" class="value">--.-</span> °C
-            </div>
-            <div class="label">
-                Humedad API:
-                <span id="weather-hum" class="value">--</span> %
-            </div>
-            <div class="label">
-                Presión API:
-                <span id="weather-pres" class="value">----</span> hPa
-            </div>
-            <div class="label label-note">
-                Actualizado:
-                <span id="weather-updated">--/--/---- --:--</span>
-            </div>
-        </div>
-
-        <!-- Botón centrado -->
-        <div class="weather-actions">
-            <button id="weather-refresh">
-                Actualizar clima
-            </button>
-        </div>
-    </div>
-</div>
-
-
-
-    <!-- ===== TARJETA DE INFORME DEL CSV (ABAJO) ===== -->
+    <!-- ===== TARJETA DE INFORME DEL CSV ===== -->
     <div class="panel panel-csv">
         <h2 class="csv-title">Historial CSV</h2>
 
@@ -1867,7 +1792,6 @@ void loop() {
 
     <div class="footer">by: Luciano Aromi</div>
 
-    <!-- Script botones CSV / Clear -->
     <script>
         document.getElementById('btnCSV').addEventListener('click', function () {
             window.location.href = '/csv';
@@ -1881,101 +1805,15 @@ void loop() {
             }
         });
     </script>
+</body>
+</html>
 
-    <!-- ===== SCRIPT: WEATHERAPI SOLO T/H/Presión ===== -->
-    <script>
-        const WEATHER_API_KEY   = '9ff16c4a57b4424e947202117251907'; // tu key
-        const WEATHER_CITY      = 'Corrientes,Argentina';
-
-        function formatWeatherDate(dateString) {
-            const d = new Date(dateString);
-            return new Intl.DateTimeFormat('es-AR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            }).format(d);
-        }
-
-        async function fetchWeatherAPI() {
-            const loadingEl = document.getElementById('weather-loading');
-            const errorEl   = document.getElementById('weather-error');
-            const dataEl    = document.getElementById('weather-data');
-
-            if (loadingEl) loadingEl.style.display = 'block';
-            if (errorEl)   errorEl.style.display   = 'none';
-            if (dataEl)    dataEl.style.display    = 'none';
-
-            if (!WEATHER_API_KEY || WEATHER_API_KEY === 'TU_API_KEY') {
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (errorEl) {
-                    errorEl.textContent = 'API key de WeatherAPI no configurada.';
-                    errorEl.style.display = 'block';
-                }
-                return;
-            }
-
-            const url = `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(WEATHER_CITY)}&lang=es&aqi=no`;
-
-            try {
-                const resp = await fetch(url);
-                if (!resp.ok) {
-                    throw new Error('HTTP ' + resp.status);
-                }
-
-                const json = await resp.json();
-                const cur  = json.current;
-
-                const t = Math.round(cur.temp_c);
-                const h = cur.humidity;
-                const p = cur.pressure_mb;
-
-                const tEl = document.getElementById('weather-temp');
-                const hEl = document.getElementById('weather-hum');
-                const pEl = document.getElementById('weather-pres');
-                const uEl = document.getElementById('weather-updated');
-
-                if (tEl) tEl.textContent = t.toFixed(0);
-                if (hEl) hEl.textContent = h;
-                if (pEl) pEl.textContent = p;
-                if (uEl) uEl.textContent = formatWeatherDate(cur.last_updated);
-
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (dataEl)    dataEl.style.display    = 'block';
-
-            } catch (e) {
-                console.error('Error WeatherAPI:', e);
-                if (loadingEl) loadingEl.style.display = 'none';
-                if (errorEl) {
-                    errorEl.textContent = 'Error al obtener clima: ' + e.message;
-                    errorEl.style.display = 'block';
-                }
-            }
-        }
-
-        window.addEventListener('load', () => {
-            fetchWeatherAPI();
-
-            const btn = document.getElementById('weather-refresh');
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    fetchWeatherAPI();
-                });
-            }
-
-            // Si querés auto-actualizar cada 10 minutos:
-            // setInterval(fetchWeatherAPI, 10 * 60 * 1000);
-        });
-    </script>
-    </body>
-    </html>
 
 
 <!-- ============================================================================================= -->
 
 
-  )rawliteral");
+)rawliteral");
 
   client.stop();
 }
