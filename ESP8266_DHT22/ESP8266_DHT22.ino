@@ -1,3 +1,7 @@
+// LINEAS IMPORTANTES:
+// const float UMBRAL_LED = 38.0;  // umbral temp API
+// const unsigned long WEATHER_INTERVAL = 30000UL; // 30 segundos
+
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
@@ -69,14 +73,18 @@ uint16_t csvCount = 0;
 // =============================
 // LED + WeatherAPI
 // =============================
-const uint8_t LED_API = D6;  // LED con resistencia a este pin
+const uint8_t LED_API  = D6;  // LED temp API
+const uint8_t LED_RAIN = D7;  // LED lluvia API
 
-float tempApi = NAN;               // última temperatura desde la API
+float tempApi   = NAN;   // última temperatura desde la API
+bool  lluviaApi = false; // ¿hay lluvia según la API?
+
 unsigned long lastWeatherCheck = 0;
-const unsigned long WEATHER_INTERVAL = 30000UL; // cada 10 minutos
+const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
 
 const char* WEATHER_API_KEY = "9ff16c4a57b4424e947202117251907";
 const char* WEATHER_CITY    = "Corrientes,Argentina";
+
 
 // =============================
 // TELEGRAM CONFIG
@@ -459,7 +467,7 @@ String faseIcono(int f) {
 }
 
 // =============================
-// WeatherAPI → LED
+// WeatherAPI → temperatura + lluvia → LEDs
 // =============================
 void actualizarClimaApi() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -476,7 +484,7 @@ void actualizarClimaApi() {
   url += WEATHER_CITY;
   url += "&lang=es&aqi=no";
 
-  Serial.println("[API] Consultando WeatherAPI (solo temp_c)...");
+  Serial.println("[API] Consultando WeatherAPI (temp_c + lluvia)...");
 
   if (!http.begin(client, url)) {
     Serial.println("[API] Error en http.begin()");
@@ -493,12 +501,13 @@ void actualizarClimaApi() {
   String payload = http.getString();
   http.end();
 
+  // --------- TEMP_C ----------
   int idx = payload.indexOf("\"temp_c\":");
   if (idx < 0) {
     Serial.println("[API] No se encontró 'temp_c' en la respuesta.");
     return;
   }
-  idx += 9;
+  idx += 9; // salta "temp_c":
 
   int end = payload.indexOf(',', idx);
   if (end < 0) {
@@ -518,7 +527,64 @@ void actualizarClimaApi() {
   tempApi = tExt;
   Serial.printf("[API] Temp API = %.1f C\n", tempApi);
 
-  const float UMBRAL_LED = 23.0;
+  // --------- LLUVIA / TORMENTA ----------
+  bool hayLluvia = false;
+
+  // 1) Revisar el texto de la condición (en español, gracias a lang=es)
+  int idxCond = payload.indexOf("\"condition\":");
+  if (idxCond >= 0) {
+    int idxText = payload.indexOf("\"text\":\"", idxCond);
+    if (idxText >= 0) {
+      idxText += 8; // salta "text":" 
+      int endText = payload.indexOf('"', idxText);
+      if (endText > idxText) {
+        String txt = payload.substring(idxText, endText);
+        String txtLower = txt;
+        txtLower.toLowerCase();
+
+        // Palabras típicas de lluvia/tormenta en WeatherAPI (español)
+        if (txtLower.indexOf("lluvia")    >= 0 ||
+            txtLower.indexOf("llovizna")  >= 0 ||
+            txtLower.indexOf("chubascos") >= 0 ||
+            txtLower.indexOf("tormenta")  >= 0) {
+          hayLluvia = true;
+        }
+
+        Serial.print("[API] Condición: ");
+        Serial.println(txt);
+      }
+    }
+  }
+
+  // 2) Revisar precipitación en mm (si está disponible)
+  int idxP = payload.indexOf("\"precip_mm\":");
+  if (idxP >= 0) {
+    idxP += 12; // salta "precip_mm":
+    int endP = payload.indexOf(',', idxP);
+    if (endP < 0) endP = payload.indexOf('}', idxP);
+    if (endP > idxP) {
+      String pStr = payload.substring(idxP, endP);
+      pStr.trim();
+      float precip = pStr.toFloat();
+      Serial.printf("[API] Precip_mm = %.2f\n", precip);
+      if (precip > 0.0f) {
+        hayLluvia = true;
+      }
+    }
+  }
+
+  lluviaApi = hayLluvia;
+
+  if (lluviaApi) {
+    digitalWrite(LED_RAIN, HIGH);
+    Serial.println("[API] LED_RAIN ON (lluvia detectada)");
+  } else {
+    digitalWrite(LED_RAIN, LOW);
+    Serial.println("[API] LED_RAIN OFF (sin lluvia)");
+  }
+
+  // --------- LED DE TEMPERATURA (como antes) ----------
+  const float UMBRAL_LED = 38.0;  // umbral temp API
 
   if (!isnan(tempApi) && tempApi >= UMBRAL_LED) {
     digitalWrite(LED_API, HIGH);
@@ -528,6 +594,7 @@ void actualizarClimaApi() {
     Serial.println("[API] LED_API OFF (temp_api < umbral o dato inválido)");
   }
 }
+
 
 // =============================
 // CSV nombre e info
@@ -615,6 +682,9 @@ void setup() {
 
   pinMode(LED_API, OUTPUT);
   digitalWrite(LED_API, LOW);
+
+  pinMode(LED_RAIN, OUTPUT);   // NUEVO
+  digitalWrite(LED_RAIN, LOW); // NUEVO
 
   WiFi.begin(ssid, password);
   Serial.print("Conectando a WiFi...");
