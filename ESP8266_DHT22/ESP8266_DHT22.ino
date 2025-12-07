@@ -4,6 +4,8 @@
 // const float UMBRAL_LED = 38.0;  // umbral temp API
 // const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) - WEATHER_INTERVAL = 10UL * 60UL * 1000UL // (10 min)
 
+// const unsigned long RAIN_BLINK_INTERVAL = 300UL; // más rápido o 1000UL para más lento
+
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
@@ -96,12 +98,12 @@ float tempApi   = NAN;   // última temperatura desde la API
 bool  lluviaApi = false; // lluvia AHORA (estado actual)
 bool  lluviaPronosticoApi = false; // lluvia PRONOSTICADA (próximas horas)
 
-const unsigned long RAIN_BLINK_INTERVAL = 500UL; // 500 ms ON/OFF
+const unsigned long RAIN_BLINK_INTERVAL = 1000UL; // 500 ms ON/OFF
 unsigned long lastRainBlink = 0;
 bool rainLedState = false;
 
 unsigned long lastWeatherCheck = 0;
-const unsigned long WEATHER_INTERVAL = 30000UL; // cada 10 minutos
+const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
 
 const char* WEATHER_API_KEY = "9ff16c4a57b4424e947202117251907";
 const char* WEATHER_CITY    = "Corrientes,Argentina";
@@ -626,32 +628,51 @@ void actualizarClimaApi() {
   lluviaApi = hayLluvia;
   Serial.printf("[API] lluvia actual = %s\n", lluviaApi ? "SI" : "NO");
 
-  // --------- PRONÓSTICO DE LLUVIA (día) ----------
+
+
+  // --------- PRONÓSTICO DE LLUVIA (día completo) ----------
   bool hayLluviaPronostico = false;
 
   int idxChance = payload.indexOf("\"daily_chance_of_rain\":");
+  Serial.printf("[API] idxChance = %d\n", idxChance);
+
   if (idxChance >= 0) {
     int colon = payload.indexOf(':', idxChance);
+    Serial.printf("[API] colon = %d\n", colon);
+
     if (colon > 0) {
       int start = colon + 1;  // primer carácter después de ':'
       int endChance = payload.indexOf(',', start);
       if (endChance < 0) endChance = payload.indexOf('}', start);
 
+      Serial.printf("[API] start = %d, endChance = %d\n", start, endChance);
+
       if (endChance > start) {
         String cStr = payload.substring(start, endChance);
         cStr.trim();
+        Serial.print("[API] cStr (raw) = '");
+        Serial.print(cStr);
+        Serial.println("'");
+
         int chance = cStr.toInt();
         Serial.printf("[API] daily_chance_of_rain = %d%%\n", chance);
-        if (chance >= 50) {
+
+        if (chance >= 70) { // umbral de pronóstico
           hayLluviaPronostico = true;
         }
+      } else {
+        Serial.println("[API] endChance <= start, no se pudo aislar daily_chance_of_rain.");
       }
+    } else {
+      Serial.println("[API] No se encontró ':' después de daily_chance_of_rain.");
     }
+  } else {
+    Serial.println("[API] 'daily_chance_of_rain' no encontrado en payload.");
   }
-
 
   lluviaPronosticoApi = hayLluviaPronostico;
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
+
 
   // --------- LED DE TEMPERATURA ----------
   const float UMBRAL_LED = 38.0;  // umbral temp API
