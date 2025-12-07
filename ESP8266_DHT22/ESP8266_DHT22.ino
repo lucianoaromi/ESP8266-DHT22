@@ -6,6 +6,8 @@
 
 // const unsigned long RAIN_BLINK_INTERVAL = 300UL; // más rápido o 1000UL para más lento
 
+// if (precip > 0.5f) // ------------------------------------- (UMBRAL DE PRECIPITACION) 1/2mm
+
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
@@ -13,6 +15,11 @@
 #include <time.h>
 #include <FS.h>
 #include <math.h>
+
+// =============================
+// Brillo del LED de lluvia (0 = apagado, 1023 = máximo)
+// =============================
+const uint16_t BRILLO_LLUVIA = 15; 
 
 
 // =============================
@@ -98,7 +105,7 @@ float tempApi   = NAN;   // última temperatura desde la API
 bool  lluviaApi = false; // lluvia AHORA (estado actual)
 bool  lluviaPronosticoApi = false; // lluvia PRONOSTICADA (próximas horas)
 
-const unsigned long RAIN_BLINK_INTERVAL = 1000UL; // 500 ms ON/OFF
+const unsigned long RAIN_BLINK_INTERVAL = 500UL; // 500 ms ON/OFF
 unsigned long lastRainBlink = 0;
 bool rainLedState = false;
 
@@ -619,7 +626,7 @@ void actualizarClimaApi() {
       pStr.trim();
       float precip = pStr.toFloat();
       Serial.printf("[API] Precip_mm (actual) = %.2f\n", precip);
-      if (precip > 0.0f) {
+      if (precip > 1.0f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
         hayLluvia = true;
       }
     }
@@ -673,6 +680,7 @@ void actualizarClimaApi() {
   lluviaPronosticoApi = hayLluviaPronostico;
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
 
+//-------------------------------------------------------------------------------------------------
 
   // --------- LED DE TEMPERATURA ----------
   const float UMBRAL_LED = 38.0;  // umbral temp API
@@ -776,7 +784,7 @@ void setup() {
   digitalWrite(LED_API, LOW);
 
   pinMode(LED_RAIN, OUTPUT);   // NUEVO
-  digitalWrite(LED_RAIN, LOW); // NUEVO
+  analogWrite(LED_RAIN, 0); // NUEVO
 
   WiFi.begin(ssid, password);
   Serial.print("Conectando a WiFi...");
@@ -848,25 +856,26 @@ void loop() {
     actualizarClimaApi();
   }
 
-  // ===== LÓGICA DEL LED_RAIN =====
+  // ===== LÓGICA DEL LED_RAIN (con PWM) =====
   if (lluviaApi) {
-    // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido
-    digitalWrite(LED_RAIN, HIGH);
+    // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido (pero tenue)
+    analogWrite(LED_RAIN, BRILLO_LLUVIA);
     rainLedState = true; // por si venía parpadeando
   } 
   else if (lluviaPronosticoApi) {
-    // 2) No llueve ahora, pero hay PRONÓSTICO -> parpadeo
+    // 2) No llueve ahora, pero hay PRONÓSTICO -> parpadeo con PWM
     if (ahora - lastRainBlink >= RAIN_BLINK_INTERVAL) {
       lastRainBlink = ahora;
       rainLedState = !rainLedState;
-      digitalWrite(LED_RAIN, rainLedState ? HIGH : LOW);
+      analogWrite(LED_RAIN, rainLedState ? BRILLO_LLUVIA : 0);
     }
   } 
   else {
     // 3) Sin lluvia ni pronóstico -> LED apagado
-    digitalWrite(LED_RAIN, LOW);
+    analogWrite(LED_RAIN, 0);
     rainLedState = false;
   }
+
 
 
   // =============================
