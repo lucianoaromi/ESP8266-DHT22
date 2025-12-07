@@ -631,18 +631,24 @@ void actualizarClimaApi() {
 
   int idxChance = payload.indexOf("\"daily_chance_of_rain\":");
   if (idxChance >= 0) {
-    idxChance += 24; // salta "daily_chance_of_rain":
-    int endChance = payload.indexOf(',', idxChance);
-    if (endChance > idxChance) {
-      String cStr = payload.substring(idxChance, endChance);
-      cStr.trim();
-      int chance = cStr.toInt();
-      Serial.printf("[API] daily_chance_of_rain = %d%%\n", chance);
-      if (chance >= 50) { // umbral de pronóstico
-        hayLluviaPronostico = true;
+    int colon = payload.indexOf(':', idxChance);
+    if (colon > 0) {
+      int start = colon + 1;  // primer carácter después de ':'
+      int endChance = payload.indexOf(',', start);
+      if (endChance < 0) endChance = payload.indexOf('}', start);
+
+      if (endChance > start) {
+        String cStr = payload.substring(start, endChance);
+        cStr.trim();
+        int chance = cStr.toInt();
+        Serial.printf("[API] daily_chance_of_rain = %d%%\n", chance);
+        if (chance >= 50) {
+          hayLluviaPronostico = true;
+        }
       }
     }
   }
+
 
   lluviaPronosticoApi = hayLluviaPronostico;
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
