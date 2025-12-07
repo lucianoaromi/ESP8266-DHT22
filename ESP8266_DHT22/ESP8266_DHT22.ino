@@ -1,6 +1,8 @@
-// LINEAS IMPORTANTES:
+// =============================
+//  LINEAS IMPORTANTES:
+// =============================
 // const float UMBRAL_LED = 38.0;  // umbral temp API
-// const unsigned long WEATHER_INTERVAL = 30000UL; // 30 segundos
+// const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) - WEATHER_INTERVAL = 10UL * 60UL * 1000UL // (10 min)
 
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
@@ -9,6 +11,20 @@
 #include <time.h>
 #include <FS.h>
 #include <math.h>
+
+
+// =============================
+// CONTANTES PARA REGULAR TEMPERATURA Y HUMEDAD
+// =============================
+const float OFFSET_TEMP    = -0.7;  // en °C, ajustalo para igualar al otro sensor
+const float OFFSET_HUM     = -14.0;  // en %, ajustalo para igualar al otro sensor
+
+
+// =============================
+// CONTANTES PARA PROBAR LED DE LLUVIA
+// =============================
+const bool MODO_PRUEBA_LLUVIA = false;   // <-- true para forzar lluvia
+
 
 // =============================
 // CONFIG WIFI
@@ -77,10 +93,15 @@ const uint8_t LED_API  = D6;  // LED temp API
 const uint8_t LED_RAIN = D7;  // LED lluvia API
 
 float tempApi   = NAN;   // última temperatura desde la API
-bool  lluviaApi = false; // ¿hay lluvia según la API?
+bool  lluviaApi = false; // lluvia AHORA (estado actual)
+bool  lluviaPronosticoApi = false; // lluvia PRONOSTICADA (próximas horas)
+
+const unsigned long RAIN_BLINK_INTERVAL = 500UL; // 500 ms ON/OFF
+unsigned long lastRainBlink = 0;
+bool rainLedState = false;
 
 unsigned long lastWeatherCheck = 0;
-const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
+const unsigned long WEATHER_INTERVAL = 30000UL; // cada 10 minutos
 
 const char* WEATHER_API_KEY = "9ff16c4a57b4424e947202117251907";
 const char* WEATHER_CITY    = "Corrientes,Argentina";
@@ -227,8 +248,8 @@ bool leerDHT() {
   TEMPERATURA = sumaT / validas;
   HUMEDAD     = sumaH / validas;
 
-  HUMEDAD     = HUMEDAD - 9.0;
-  TEMPERATURA = TEMPERATURA - 0.8;
+  TEMPERATURA += OFFSET_TEMP;
+  HUMEDAD     += OFFSET_HUM;
 
   if (HUMEDAD < 0)   HUMEDAD = 0;
   if (HUMEDAD > 100) HUMEDAD = 100;
@@ -478,13 +499,19 @@ void actualizarClimaApi() {
   WiFiClient client;
   HTTPClient http;
 
-  String url = "http://api.weatherapi.com/v1/current.json?key=";
+  String url = "http://api.weatherapi.com/v1/forecast.json?key=";
   url += WEATHER_API_KEY;
   url += "&q=";
   url += WEATHER_CITY;
-  url += "&lang=es&aqi=no";
+  url += "&lang=es&aqi=no&days=1";  // 1 día de pronóstico
 
-  Serial.println("[API] Consultando WeatherAPI (temp_c + lluvia)...");
+  Serial.println("[API] Consultando WeatherAPI (forecast + current)...");
+  Serial.print("[API] URL: ");
+  Serial.println(url);
+
+  // IMPORTANTE: evitar chunked y problemas raros
+  http.useHTTP10(true);
+  http.setTimeout(10000);  // 10 s
 
   if (!http.begin(client, url)) {
     Serial.println("[API] Error en http.begin()");
@@ -492,16 +519,40 @@ void actualizarClimaApi() {
   }
 
   int httpCode = http.GET();
+  Serial.printf("[API] httpCode = %d\n", httpCode);
+
   if (httpCode != HTTP_CODE_OK) {
     Serial.printf("[API] Error HTTP: %d\n", httpCode);
     http.end();
     return;
   }
 
-  String payload = http.getString();
+  // En vez de getString() de TODO, leemos solo una parte (p.ej. 4 KB)
+  WiFiClient *stream = http.getStreamPtr();
+  String payload = "";
+  const size_t MAX_LEN = 4096;   // suficiente para location + current + day
+  unsigned long t0 = millis();
+
+  while (stream->connected() && (millis() - t0 < 3000) && payload.length() < MAX_LEN) {
+    while (stream->available() && payload.length() < MAX_LEN) {
+      char c = stream->read();
+      payload += c;
+    }
+  }
+
   http.end();
 
-  // --------- TEMP_C ----------
+  Serial.printf("[API] payload length = %u\n", payload.length());
+  Serial.println("[API] ---- PAYLOAD PARCIAL ----");
+  Serial.println(payload);
+  Serial.println("[API] --------------------------");
+
+  if (payload.length() == 0) {
+    Serial.println("[API] Payload vacío, no se puede parsear.");
+    return;
+  }
+
+  // --------- TEMP_C (current) ----------
   int idx = payload.indexOf("\"temp_c\":");
   if (idx < 0) {
     Serial.println("[API] No se encontró 'temp_c' en la respuesta.");
@@ -527,10 +578,10 @@ void actualizarClimaApi() {
   tempApi = tExt;
   Serial.printf("[API] Temp API = %.1f C\n", tempApi);
 
-  // --------- LLUVIA / TORMENTA ----------
+  // --------- LLUVIA / TORMENTA (ahora) ----------
   bool hayLluvia = false;
 
-  // 1) Revisar el texto de la condición (en español, gracias a lang=es)
+  // 1) Texto de la condición actual
   int idxCond = payload.indexOf("\"condition\":");
   if (idxCond >= 0) {
     int idxText = payload.indexOf("\"text\":\"", idxCond);
@@ -542,7 +593,6 @@ void actualizarClimaApi() {
         String txtLower = txt;
         txtLower.toLowerCase();
 
-        // Palabras típicas de lluvia/tormenta en WeatherAPI (español)
         if (txtLower.indexOf("lluvia")    >= 0 ||
             txtLower.indexOf("llovizna")  >= 0 ||
             txtLower.indexOf("chubascos") >= 0 ||
@@ -550,13 +600,13 @@ void actualizarClimaApi() {
           hayLluvia = true;
         }
 
-        Serial.print("[API] Condición: ");
+        Serial.print("[API] Condición actual: ");
         Serial.println(txt);
       }
     }
   }
 
-  // 2) Revisar precipitación en mm (si está disponible)
+  // 2) precip_mm actual
   int idxP = payload.indexOf("\"precip_mm\":");
   if (idxP >= 0) {
     idxP += 12; // salta "precip_mm":
@@ -566,7 +616,7 @@ void actualizarClimaApi() {
       String pStr = payload.substring(idxP, endP);
       pStr.trim();
       float precip = pStr.toFloat();
-      Serial.printf("[API] Precip_mm = %.2f\n", precip);
+      Serial.printf("[API] Precip_mm (actual) = %.2f\n", precip);
       if (precip > 0.0f) {
         hayLluvia = true;
       }
@@ -574,16 +624,30 @@ void actualizarClimaApi() {
   }
 
   lluviaApi = hayLluvia;
+  Serial.printf("[API] lluvia actual = %s\n", lluviaApi ? "SI" : "NO");
 
-  if (lluviaApi) {
-    digitalWrite(LED_RAIN, HIGH);
-    Serial.println("[API] LED_RAIN ON (lluvia detectada)");
-  } else {
-    digitalWrite(LED_RAIN, LOW);
-    Serial.println("[API] LED_RAIN OFF (sin lluvia)");
+  // --------- PRONÓSTICO DE LLUVIA (día) ----------
+  bool hayLluviaPronostico = false;
+
+  int idxChance = payload.indexOf("\"daily_chance_of_rain\":");
+  if (idxChance >= 0) {
+    idxChance += 24; // salta "daily_chance_of_rain":
+    int endChance = payload.indexOf(',', idxChance);
+    if (endChance > idxChance) {
+      String cStr = payload.substring(idxChance, endChance);
+      cStr.trim();
+      int chance = cStr.toInt();
+      Serial.printf("[API] daily_chance_of_rain = %d%%\n", chance);
+      if (chance >= 50) { // umbral de pronóstico
+        hayLluviaPronostico = true;
+      }
+    }
   }
 
-  // --------- LED DE TEMPERATURA (como antes) ----------
+  lluviaPronosticoApi = hayLluviaPronostico;
+  Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
+
+  // --------- LED DE TEMPERATURA ----------
   const float UMBRAL_LED = 38.0;  // umbral temp API
 
   if (!isnan(tempApi) && tempApi >= UMBRAL_LED) {
@@ -595,6 +659,7 @@ void actualizarClimaApi() {
   }
 }
 
+// ============================= Fin de actualizarClimaApi() =============================
 
 // =============================
 // CSV nombre e info
@@ -755,6 +820,27 @@ void loop() {
     lastWeatherCheck = ahora;
     actualizarClimaApi();
   }
+
+  // ===== LÓGICA DEL LED_RAIN =====
+  if (lluviaApi) {
+    // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido
+    digitalWrite(LED_RAIN, HIGH);
+    rainLedState = true; // por si venía parpadeando
+  } 
+  else if (lluviaPronosticoApi) {
+    // 2) No llueve ahora, pero hay PRONÓSTICO -> parpadeo
+    if (ahora - lastRainBlink >= RAIN_BLINK_INTERVAL) {
+      lastRainBlink = ahora;
+      rainLedState = !rainLedState;
+      digitalWrite(LED_RAIN, rainLedState ? HIGH : LOW);
+    }
+  } 
+  else {
+    // 3) Sin lluvia ni pronóstico -> LED apagado
+    digitalWrite(LED_RAIN, LOW);
+    rainLedState = false;
+  }
+
 
   // =============================
   // SERVIDOR WEB
