@@ -25,7 +25,7 @@ const uint16_t BRILLO_LLUVIA = 15;
 
 
 // =============================
-// CONTANTES PARA REGULAR TEMPERATURA Y HUMEDAD
+// CONSTANTES PARA REGULAR TEMPERATURA Y HUMEDAD
 // =============================
 const float OFFSET_TEMP    = -0.7;  // en °C, ajustalo para igualar al otro sensor
 const float OFFSET_HUM     = -14.0;  // en %, ajustalo para igualar al otro sensor
@@ -44,7 +44,7 @@ const bool MODO_PRUEBA_LLUVIA = false;   // <-- true para forzar lluvia
 //     * Dentro de esos 30 s parpadea cada 500 ms (ON/OFF)
 // =============================
 const unsigned long RAIN_BLINK_INTERVAL  = 500UL;              // Parpadeo interno: 500 ms
-const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 30 s
+const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 60 s
 const unsigned long RAIN_BURST_PERIOD    = 5UL * 60UL * 1000UL;// Cada 5 min se inicia una ráfaga
 
 
