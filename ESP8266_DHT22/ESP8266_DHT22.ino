@@ -4,9 +4,11 @@
 // const float UMBRAL_LED = 38.0;  // umbral temp API
 // const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) - WEATHER_INTERVAL = 10UL * 60UL * 1000UL // (10 min)
 
-// const unsigned long RAIN_BLINK_INTERVAL = 300UL; // más rápido o 1000UL para más lento
-
 // if (precip > 0.5f) // ------------------------------------- (UMBRAL DE PRECIPITACION) 1/2mm
+
+// const unsigned long RAIN_BURST_DURATION  = 30UL * 1000UL;      // Duración de la ráfaga: 30 s
+
+// °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°
 
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
@@ -33,6 +35,19 @@ const float OFFSET_HUM     = -14.0;  // en %, ajustalo para igualar al otro sens
 // CONTANTES PARA PROBAR LED DE LLUVIA
 // =============================
 const bool MODO_PRUEBA_LLUVIA = false;   // <-- true para forzar lluvia
+
+
+// =============================
+// PATRÓN LED LLUVIA:
+// - Si hay PRONÓSTICO de lluvia (lluviaPronosticoApi == true):
+//     * Cada 5 minutos se abre una ventana de 30 s
+//     * Dentro de esos 30 s parpadea cada 500 ms (ON/OFF)
+// =============================
+const unsigned long RAIN_BLINK_INTERVAL  = 500UL;              // Parpadeo interno: 500 ms
+const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 30 s
+const unsigned long RAIN_BURST_PERIOD    = 5UL * 60UL * 1000UL;// Cada 5 min se inicia una ráfaga
+
+
 
 
 // =============================
@@ -105,9 +120,12 @@ float tempApi   = NAN;   // última temperatura desde la API
 bool  lluviaApi = false; // lluvia AHORA (estado actual)
 bool  lluviaPronosticoApi = false; // lluvia PRONOSTICADA (próximas horas)
 
-const unsigned long RAIN_BLINK_INTERVAL = 500UL; // 500 ms ON/OFF
-unsigned long lastRainBlink = 0;
-bool rainLedState = false;
+// Estado para el patrón de ráfagas de lluvia
+unsigned long lastRainBurst   = 0;   // Cuándo empezó la última ráfaga de 30 s
+unsigned long lastBlinkToggle = 0;   // Último cambio ON/OFF dentro de la ráfaga
+bool          rainLedState    = false;
+
+
 
 unsigned long lastWeatherCheck = 0;
 const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
@@ -496,6 +514,66 @@ String faseIcono(int f) {
   return "🌑";
 }
 
+
+// =============================
+// ACTUALIZAR LED DE LLUVIA (PWM, no bloqueante)
+// =============================
+void actualizarLedRain(unsigned long ahora) {
+  // MODO PRUEBA: fuerza lluvia siempre (LED fijo tenue)
+  if (MODO_PRUEBA_LLUVIA) {
+    analogWrite(LED_RAIN, BRILLO_LLUVIA);
+    return;
+  }
+
+  // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido (tenue)
+  if (lluviaApi) {
+    analogWrite(LED_RAIN, BRILLO_LLUVIA);
+    return;
+  }
+
+  // 2) Si NO llueve, pero HAY PRONÓSTICO de lluvia:
+  //    - Cada 5 minutos se abre una ventana de 30 s
+  //    - Dentro de esos 30 s el LED parpadea cada 500 ms
+  if (lluviaPronosticoApi) {
+    static bool enVentana = false;   // true = estamos dentro de los 30 s de ráfaga
+
+    // ¿Hay que iniciar una nueva ráfaga de 30 s?
+    if (!enVentana && (ahora - lastRainBurst >= RAIN_BURST_PERIOD)) {
+      enVentana      = true;
+      lastRainBurst  = ahora;
+      lastBlinkToggle = ahora;
+      rainLedState   = false;
+      analogWrite(LED_RAIN, 0);      // empezamos apagado
+    }
+
+    if (enVentana) {
+      // Parpadeo interno cada 500 ms
+      if (ahora - lastBlinkToggle >= RAIN_BLINK_INTERVAL) {
+        lastBlinkToggle = ahora;
+        rainLedState = !rainLedState;
+        analogWrite(LED_RAIN, rainLedState ? BRILLO_LLUVIA : 0);
+      }
+
+      // ¿Se terminaron los 30 segundos de la ráfaga?
+      if (ahora - lastRainBurst >= RAIN_BURST_DURATION) {
+        enVentana = false;
+        rainLedState = false;
+        analogWrite(LED_RAIN, 0);    // apagamos hasta la próxima ráfaga
+      }
+    } else {
+      // Fuera de la ventana de 30 s, pero con pronóstico: LED apagado
+      analogWrite(LED_RAIN, 0);
+    }
+
+    return; // ya tratamos todos los casos cuando hay pronóstico
+  }
+
+  // 3) Sin lluvia actual ni pronóstico -> LED apagado
+  analogWrite(LED_RAIN, 0);
+}
+
+
+
 // =============================
 // WeatherAPI → temperatura + lluvia → LEDs
 // =============================
@@ -626,7 +704,7 @@ void actualizarClimaApi() {
       pStr.trim();
       float precip = pStr.toFloat();
       Serial.printf("[API] Precip_mm (actual) = %.2f\n", precip);
-      if (precip > 1.0f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
+      if (precip > 0.7f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
         hayLluvia = true;
       }
     }
@@ -681,6 +759,7 @@ void actualizarClimaApi() {
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
 
 //-------------------------------------------------------------------------------------------------
+
 
   // --------- LED DE TEMPERATURA ----------
   const float UMBRAL_LED = 38.0;  // umbral temp API
@@ -823,7 +902,10 @@ void setup() {
 void loop() {
   unsigned long ahora = millis();
 
-  // Lectura DHT + alerta
+// 1) SIEMPRE: actualizar LED de lluvia primero (rápido, sin bloqueos)
+  actualizarLedRain(ahora);
+
+// 2) Lectura DHT + alerta
   if (ahora - lastRead > READ_INTERVAL_MS) {
     lastRead = ahora;
 
@@ -855,27 +937,6 @@ void loop() {
     lastWeatherCheck = ahora;
     actualizarClimaApi();
   }
-
-  // ===== LÓGICA DEL LED_RAIN (con PWM) =====
-  if (lluviaApi) {
-    // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido (pero tenue)
-    analogWrite(LED_RAIN, BRILLO_LLUVIA);
-    rainLedState = true; // por si venía parpadeando
-  } 
-  else if (lluviaPronosticoApi) {
-    // 2) No llueve ahora, pero hay PRONÓSTICO -> parpadeo con PWM
-    if (ahora - lastRainBlink >= RAIN_BLINK_INTERVAL) {
-      lastRainBlink = ahora;
-      rainLedState = !rainLedState;
-      analogWrite(LED_RAIN, rainLedState ? BRILLO_LLUVIA : 0);
-    }
-  } 
-  else {
-    // 3) Sin lluvia ni pronóstico -> LED apagado
-    analogWrite(LED_RAIN, 0);
-    rainLedState = false;
-  }
-
 
 
   // =============================
