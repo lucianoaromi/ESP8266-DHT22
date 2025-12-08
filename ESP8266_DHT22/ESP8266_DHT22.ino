@@ -1,12 +1,12 @@
 // =============================
 //  LINEAS IMPORTANTES:
-// =============================
+// =============================y
 // const float UMBRAL_LED = 38.0;  // umbral temp API
 // const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) - WEATHER_INTERVAL = 10UL * 60UL * 1000UL // (10 min)
 
 // if (precip > 0.5f) // ------------------------------------- (UMBRAL DE PRECIPITACION) 1/2mm
 
-// const unsigned long RAIN_BURST_DURATION  = 30UL * 1000UL;      // Duración de la ráfaga: 30 s
+// const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 60 s
 
 // °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°
 
@@ -14,6 +14,7 @@
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
 #include <DHT.h>
+#include <Ticker.h>
 #include <time.h>
 #include <FS.h>
 #include <math.h>
@@ -40,8 +41,8 @@ const bool MODO_PRUEBA_LLUVIA = false;   // <-- true para forzar lluvia
 // =============================
 // PATRÓN LED LLUVIA:
 // - Si hay PRONÓSTICO de lluvia (lluviaPronosticoApi == true):
-//     * Cada 5 minutos se abre una ventana de 30 s
-//     * Dentro de esos 30 s parpadea cada 500 ms (ON/OFF)
+//     * Cada 5 minutos se abre una ventana de 60 s
+//     * Dentro de esos 60 s parpadea cada 500 ms (ON/OFF)
 // =============================
 const unsigned long RAIN_BLINK_INTERVAL  = 500UL;              // Parpadeo interno: 500 ms
 const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 60 s
@@ -62,6 +63,10 @@ const char* password = "Dr4Y0l4nd4G0nz4l3z";
 #define SENSOR D5
 #define DHTTYPE DHT22
 DHT dht(SENSOR, DHTTYPE);
+
+// Declaraciones adelantadas de funciones de control de LED de lluvia
+void actualizarLedRain(unsigned long ahora);
+void actualizarPatronLluvia();
 
 // Variables globales (valor crudo promediado)
 float TEMPERATURA = 0;
@@ -119,6 +124,13 @@ const uint8_t LED_RAIN = D7;  // LED lluvia API
 float tempApi   = NAN;   // última temperatura desde la API
 bool  lluviaApi = false; // lluvia AHORA (estado actual)
 bool  lluviaPronosticoApi = false; // lluvia PRONOSTICADA (próximas horas)
+bool  rainWindowActive = false;     // indica si estamos dentro de la ráfaga de parpadeo
+bool  rainPatternEnabled = false;    // indica si el patrón de pronóstico está habilitado
+
+// Tickers para patrón de lluvia
+Ticker rainBlinkTicker;      // parpadeo cada 500 ms durante la ventana
+Ticker rainWindowEndTicker;  // fin de ventana (60 s)
+Ticker rainBurstTicker;      // programa la próxima ventana (cada 5 min)
 
 // Estado para el patrón de ráfagas de lluvia
 unsigned long lastRainBurst   = 0;   // Cuándo empezó la última ráfaga de 30 s
@@ -267,7 +279,9 @@ bool leerDHT() {
       sumaH += h;
       validas++;
     }
-    delay(50);
+    // Evitar pausar demasiado el parpadeo del LED de lluvia
+    actualizarLedRain(millis());
+    delay(10);
   }
 
   if (validas == 0) return false;
@@ -516,60 +530,79 @@ String faseIcono(int f) {
 
 
 // =============================
-// ACTUALIZAR LED DE LLUVIA (PWM, no bloqueante)
-// =============================
-void actualizarLedRain(unsigned long ahora) {
-  // MODO PRUEBA: fuerza lluvia siempre (LED fijo tenue)
-  if (MODO_PRUEBA_LLUVIA) {
-    analogWrite(LED_RAIN, BRILLO_LLUVIA);
-    return;
-  }
+// -----------------------------
+// Ticker callbacks para patrón de lluvia
+// -----------------------------
+void IRAM_ATTR toggleRainLed() {
+  rainLedState = !rainLedState;
+  analogWrite(LED_RAIN, rainLedState ? BRILLO_LLUVIA : 0);
+}
 
-  // 1) Si ESTÁ lloviendo ahora -> LED fijo encendido (tenue)
-  if (lluviaApi) {
-    analogWrite(LED_RAIN, BRILLO_LLUVIA);
-    return;
-  }
-
-  // 2) Si NO llueve, pero HAY PRONÓSTICO de lluvia:
-  //    - Cada 5 minutos se abre una ventana de 30 s
-  //    - Dentro de esos 30 s el LED parpadea cada 500 ms
-  if (lluviaPronosticoApi) {
-    static bool enVentana = false;   // true = estamos dentro de los 30 s de ráfaga
-
-    // ¿Hay que iniciar una nueva ráfaga de 30 s?
-    if (!enVentana && (ahora - lastRainBurst >= RAIN_BURST_PERIOD)) {
-      enVentana      = true;
-      lastRainBurst  = ahora;
-      lastBlinkToggle = ahora;
-      rainLedState   = false;
-      analogWrite(LED_RAIN, 0);      // empezamos apagado
-    }
-
-    if (enVentana) {
-      // Parpadeo interno cada 500 ms
-      if (ahora - lastBlinkToggle >= RAIN_BLINK_INTERVAL) {
-        lastBlinkToggle = ahora;
-        rainLedState = !rainLedState;
-        analogWrite(LED_RAIN, rainLedState ? BRILLO_LLUVIA : 0);
-      }
-
-      // ¿Se terminaron los 30 segundos de la ráfaga?
-      if (ahora - lastRainBurst >= RAIN_BURST_DURATION) {
-        enVentana = false;
-        rainLedState = false;
-        analogWrite(LED_RAIN, 0);    // apagamos hasta la próxima ráfaga
-      }
-    } else {
-      // Fuera de la ventana de 30 s, pero con pronóstico: LED apagado
-      analogWrite(LED_RAIN, 0);
-    }
-
-    return; // ya tratamos todos los casos cuando hay pronóstico
-  }
-
-  // 3) Sin lluvia actual ni pronóstico -> LED apagado
+void stopRainWindow() {
+  rainWindowActive = false;
+  rainLedState = false;
+  rainBlinkTicker.detach();
   analogWrite(LED_RAIN, 0);
+}
+
+void startRainWindow() {
+  rainWindowActive = true;
+  rainLedState = false;
+  analogWrite(LED_RAIN, 0);
+  lastRainBurst = millis();
+
+  rainBlinkTicker.detach();
+  rainBlinkTicker.attach_ms(RAIN_BLINK_INTERVAL, toggleRainLed);
+
+  rainWindowEndTicker.detach();
+  rainWindowEndTicker.once_ms(RAIN_BURST_DURATION, stopRainWindow);
+}
+
+void disableRainPattern() {
+  rainPatternEnabled = false;
+  rainBurstTicker.detach();
+  rainWindowEndTicker.detach();
+  rainBlinkTicker.detach();
+  stopRainWindow();
+}
+
+void enableRainPattern() {
+  rainPatternEnabled = true;
+  startRainWindow();            // arranca inmediatamente la primera ráfaga
+  rainBurstTicker.detach();
+  rainBurstTicker.attach_ms(RAIN_BURST_PERIOD, startRainWindow);
+}
+
+// Controla el patrón según lluvia actual / pronóstico / modo prueba
+void actualizarPatronLluvia() {
+  if (MODO_PRUEBA_LLUVIA) {
+    disableRainPattern();
+    analogWrite(LED_RAIN, BRILLO_LLUVIA);
+    return;
+  }
+
+  // Lluvia actual: LED fijo encendido, sin parpadeo
+  if (lluviaApi) {
+    disableRainPattern();
+    analogWrite(LED_RAIN, BRILLO_LLUVIA);
+    return;
+  }
+
+  // Pronóstico de lluvia: patrón con ráfagas de 60 s cada 5 min
+  if (lluviaPronosticoApi) {
+    if (!rainPatternEnabled) {
+      enableRainPattern();
+    }
+    return;
+  }
+
+  // Sin lluvia ni pronóstico: todo apagado
+  disableRainPattern();
+}
+
+// Mantener compatibilidad con llamadas existentes
+void actualizarLedRain(unsigned long /*ahora*/) {
+  actualizarPatronLluvia();
 }
 
 
@@ -617,7 +650,7 @@ void actualizarClimaApi() {
   // En vez de getString() de TODO, leemos solo una parte (p.ej. 4 KB)
   WiFiClient *stream = http.getStreamPtr();
   String payload = "";
-  const size_t MAX_LEN = 4096;   // suficiente para location + current + day
+  const size_t MAX_LEN = 8192;   // margen mayor para incluir pronóstico completo
   unsigned long t0 = millis();
 
   while (stream->connected() && (millis() - t0 < 3000) && payload.length() < MAX_LEN) {
@@ -704,7 +737,7 @@ void actualizarClimaApi() {
       pStr.trim();
       float precip = pStr.toFloat();
       Serial.printf("[API] Precip_mm (actual) = %.2f\n", precip);
-      if (precip > 0.7f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
+      if (precip > 0.75f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
         hayLluvia = true;
       }
     }
@@ -757,6 +790,9 @@ void actualizarClimaApi() {
 
   lluviaPronosticoApi = hayLluviaPronostico;
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
+
+  // Ajustar patrón de LED según el nuevo estado
+  actualizarPatronLluvia();
 
 //-------------------------------------------------------------------------------------------------
 
@@ -877,6 +913,10 @@ void setup() {
 
   configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
+  // Primera consulta para inicializar LEDs y estado sin esperar el intervalo completo
+  actualizarClimaApi();
+  lastWeatherCheck = millis();
+
   for (int i = 0; i < HOUR_POINTS; i++) {
     histTemp[i] = NAN;
     histHum[i]  = NAN;
@@ -894,6 +934,9 @@ void setup() {
   server.begin();
 
   enviarTelegram("🤖 Sistema iniciado correctamente.\nIP: " + WiFi.localIP().toString());
+
+  // Inicializa el patrón de lluvia (apagado por defecto)
+  actualizarPatronLluvia();
 }
 
 // =============================
@@ -933,7 +976,8 @@ void loop() {
   }
 
   // WeatherAPI cada X minutos
-  if (ahora - lastWeatherCheck >= WEATHER_INTERVAL) {
+  // Evita bloquear el parpadeo de lluvia con llamadas HTTP largas
+  if (!rainWindowActive && (ahora - lastWeatherCheck >= WEATHER_INTERVAL)) {
     lastWeatherCheck = ahora;
     actualizarClimaApi();
   }
@@ -951,6 +995,9 @@ void loop() {
       client.stop();
       return;
     }
+    // Mantener parpadeo responsivo mientras esperamos datos del cliente
+    actualizarLedRain(millis());
+    delay(1);
   }
 
   String requestLine = client.readStringUntil('\r');
