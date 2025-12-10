@@ -1,12 +1,12 @@
 // =============================
 //  LINEAS IMPORTANTES:
-// =============================y
-// const float UMBRAL_LED = 38.0;  // umbral temp API
-// const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) - WEATHER_INTERVAL = 10UL * 60UL * 1000UL // (10 min)
+// =============================
+// const float UMBRAL_LED = 38.0;  // (umbral temperatura API)
+// const unsigned long WEATHER_INTERVAL = 30000UL; // (30 segundos) °°°°°°°°°°° 10UL * 60UL * 1000UL // (10 min)
 
-// if (precip > 0.5f) // ------------------------------------- (UMBRAL DE PRECIPITACION) 1/2mm
+// const float UMBRAL_PRECIP_ACTUAL = 0.5f; // Umbral de precipitación más estricto (mm)
 
-// const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 60 s
+// const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;  // Duración de la ráfaga: 60 s
 
 // °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°
 
@@ -47,8 +47,6 @@ const bool MODO_PRUEBA_LLUVIA = false;   // <-- true para forzar lluvia
 const unsigned long RAIN_BLINK_INTERVAL  = 500UL;              // Parpadeo interno: 500 ms
 const unsigned long RAIN_BURST_DURATION  = 60UL * 1000UL;      // Duración de la ráfaga: 60 s
 const unsigned long RAIN_BURST_PERIOD    = 5UL * 60UL * 1000UL;// Cada 5 min se inicia una ráfaga
-
-
 
 
 // =============================
@@ -137,8 +135,6 @@ unsigned long lastRainBurst   = 0;   // Cuándo empezó la última ráfaga de 30
 unsigned long lastBlinkToggle = 0;   // Último cambio ON/OFF dentro de la ráfaga
 bool          rainLedState    = false;
 
-
-
 unsigned long lastWeatherCheck = 0;
 const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
 
@@ -185,6 +181,8 @@ String obtenerFechaHora() {
   return String(buffer);
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // ENCODER URL PARA TELEGRAM
 // =============================
@@ -206,6 +204,8 @@ String urlEncode(const String &text) {
   }
   return encoded;
 }
+
+//-------------------------------------------------------------------------------------------------
 
 // =============================
 // ENVIAR MENSAJE TELEGRAM
@@ -262,6 +262,8 @@ void actualizarFiltro() {
   }
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // LECTURA DEL DHT22
 // =============================
@@ -309,6 +311,8 @@ bool leerDHT() {
   return true;
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // INICIALIZAR LOG EN SPIFFS
 // =============================
@@ -347,6 +351,8 @@ void iniciarLog() {
   Serial.printf("Log existente con %lu lineas.\n", logLines);
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // AGREGAR REGISTRO AL LOG
 // =============================
@@ -375,6 +381,8 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
     logLines = 0;
   }
 }
+
+//-------------------------------------------------------------------------------------------------
 
 // =============================
 // GUARDAR MUESTRA EN HISTORIAL
@@ -425,6 +433,8 @@ void actualizarHistorial(float t, float h) {
     }
   }
 }
+
+//-------------------------------------------------------------------------------------------------
 
 // ==========================================================
 //                    CÁLCULO DE FASE LUNAR
@@ -528,6 +538,7 @@ String faseIcono(int f) {
   return "🌑";
 }
 
+//-------------------------------------------------------------------------------------------------
 
 // =============================
 // -----------------------------
@@ -605,7 +616,7 @@ void actualizarLedRain(unsigned long /*ahora*/) {
   actualizarPatronLluvia();
 }
 
-
+//-------------------------------------------------------------------------------------------------
 
 // =============================
 // WeatherAPI → temperatura + lluvia → LEDs
@@ -698,36 +709,15 @@ void actualizarClimaApi() {
   tempApi = tExt;
   Serial.printf("[API] Temp API = %.1f C\n", tempApi);
 
+//-------------------------------------------------------------------------------------------------
+
   // --------- LLUVIA / TORMENTA (ahora) ----------
+  // Estricto: solo precip_mm > umbral y (opcional) códigos de condición
   bool hayLluvia = false;
 
-  // 1) Texto de la condición actual
-  int idxCond = payload.indexOf("\"condition\":");
-  if (idxCond >= 0) {
-    int idxText = payload.indexOf("\"text\":\"", idxCond);
-    if (idxText >= 0) {
-      idxText += 8; // salta "text":" 
-      int endText = payload.indexOf('"', idxText);
-      if (endText > idxText) {
-        String txt = payload.substring(idxText, endText);
-        String txtLower = txt;
-        txtLower.toLowerCase();
-
-        if (txtLower.indexOf("lluvia")    >= 0 ||
-            txtLower.indexOf("llovizna")  >= 0 ||
-            txtLower.indexOf("chubascos") >= 0 ||
-            txtLower.indexOf("tormenta")  >= 0) {
-          hayLluvia = true;
-        }
-
-        Serial.print("[API] Condición actual: ");
-        Serial.println(txt);
-      }
-    }
-  }
-
-  // 2) precip_mm actual
+  // precip_mm actual
   int idxP = payload.indexOf("\"precip_mm\":");
+  float precip = 0.0f;
   if (idxP >= 0) {
     idxP += 12; // salta "precip_mm":
     int endP = payload.indexOf(',', idxP);
@@ -735,25 +725,63 @@ void actualizarClimaApi() {
     if (endP > idxP) {
       String pStr = payload.substring(idxP, endP);
       pStr.trim();
-      float precip = pStr.toFloat();
+      precip = pStr.toFloat();
       Serial.printf("[API] Precip_mm (actual) = %.2f\n", precip);
-      if (precip > 0.75f) { // ------------------------------------- (UMBRAL DE PRECIPITACION)
-        hayLluvia = true;
-      }
     }
+  }
+
+  // code actual (por si se quiere filtrar por rango de lluvia)
+  int code = -1;
+  int idxCode = payload.indexOf("\"code\":");
+  if (idxCode >= 0) {
+    idxCode += 7; // salta "code":
+    int endCode = payload.indexOf(',', idxCode);
+    if (endCode < 0) endCode = payload.indexOf('}', idxCode);
+    if (endCode > idxCode) {
+      String cStr = payload.substring(idxCode, endCode);
+      cStr.trim();
+      code = cStr.toInt();
+      Serial.printf("[API] code (actual) = %d\n", code);
+    }
+  }
+
+  // Umbral de precipitación más estricto
+  const float UMBRAL_PRECIP_ACTUAL = 0.5f; // mm
+  // Rango de códigos de lluvia según WeatherAPI: 1063-1207 aprox.
+  bool codeEsLluvia = (code >= 1063 && code <= 1207);
+
+  if (precip > UMBRAL_PRECIP_ACTUAL && codeEsLluvia) {
+    hayLluvia = true;
   }
 
   lluviaApi = hayLluvia;
   Serial.printf("[API] lluvia actual = %s\n", lluviaApi ? "SI" : "NO");
 
 
+//-------------------------------------------------------------------------------------------------
 
   // --------- PRONÓSTICO DE LLUVIA (día completo) ----------
   bool hayLluviaPronostico = false;
 
+  // daily_will_it_rain (0/1) y daily_chance_of_rain (%)
+  int idxWill = payload.indexOf("\"daily_will_it_rain\":");
+  int willRain = 0;
+  if (idxWill >= 0) {
+    int colon = payload.indexOf(':', idxWill);
+    int endWill = payload.indexOf(',', colon + 1);
+    if (endWill < 0) endWill = payload.indexOf('}', colon + 1);
+    if (colon > 0 && endWill > colon) {
+      String wStr = payload.substring(colon + 1, endWill);
+      wStr.trim();
+      willRain = wStr.toInt();
+      Serial.printf("[API] daily_will_it_rain = %d\n", willRain);
+    }
+  }
+
   int idxChance = payload.indexOf("\"daily_chance_of_rain\":");
   Serial.printf("[API] idxChance = %d\n", idxChance);
 
+  int chance = 0;
   if (idxChance >= 0) {
     int colon = payload.indexOf(':', idxChance);
     Serial.printf("[API] colon = %d\n", colon);
@@ -772,12 +800,8 @@ void actualizarClimaApi() {
         Serial.print(cStr);
         Serial.println("'");
 
-        int chance = cStr.toInt();
+        chance = cStr.toInt();
         Serial.printf("[API] daily_chance_of_rain = %d%%\n", chance);
-
-        if (chance >= 70) { // umbral de pronóstico
-          hayLluviaPronostico = true;
-        }
       } else {
         Serial.println("[API] endChance <= start, no se pudo aislar daily_chance_of_rain.");
       }
@@ -788,6 +812,36 @@ void actualizarClimaApi() {
     Serial.println("[API] 'daily_chance_of_rain' no encontrado en payload.");
   }
 
+  // totalprecip_mm del día completo (pronóstico)
+  float precipDia = 0.0f;
+  int idxTotal = payload.indexOf("\"totalprecip_mm\":", idxChance >= 0 ? idxChance : idxWill);
+  if (idxTotal < 0) idxTotal = payload.indexOf("\"totalprecip_mm\":"); // respaldo
+  if (idxTotal >= 0) {
+    idxTotal += 17; // salta "totalprecip_mm":
+    int endTotal = payload.indexOf(',', idxTotal);
+    if (endTotal < 0) endTotal = payload.indexOf('}', idxTotal);
+    if (endTotal > idxTotal) {
+      String tpStr = payload.substring(idxTotal, endTotal);
+      tpStr.trim();
+      precipDia = tpStr.toFloat();
+      Serial.printf("[API] totalprecip_mm (día) = %.2f\n", precipDia);
+    }
+  }
+
+  // Criterio más estricto: requiere will_it_rain == 1 y además
+  // (chance >= umbral) O (totalprecip_mm >= umbral de lluvia pronosticada)
+  const int   UMBRAL_CHANCE_PRONOSTICO  = 75;   // % mínimo
+  const float UMBRAL_PRECIP_PRONOSTICO  = 0.4f; // mm mínimo en el día
+
+  bool chanceAlto      = (chance >= UMBRAL_CHANCE_PRONOSTICO);
+  bool precipDiaAlto   = (precipDia >= UMBRAL_PRECIP_PRONOSTICO);
+
+  if (willRain == 1 && (chanceAlto || precipDiaAlto)) {
+    hayLluviaPronostico = true;
+  } else {
+    hayLluviaPronostico = false;
+  }
+
   lluviaPronosticoApi = hayLluviaPronostico;
   Serial.printf("[API] lluvia pronosticada = %s\n", lluviaPronosticoApi ? "SI" : "NO");
 
@@ -795,7 +849,6 @@ void actualizarClimaApi() {
   actualizarPatronLluvia();
 
 //-------------------------------------------------------------------------------------------------
-
 
   // --------- LED DE TEMPERATURA ----------
   const float UMBRAL_LED = 38.0;  // umbral temp API
@@ -809,7 +862,7 @@ void actualizarClimaApi() {
   }
 }
 
-// ============================= Fin de actualizarClimaApi() =============================
+// ============================= Fin de actualizarClimaApi() ======================================
 
 // =============================
 // CSV nombre e info
@@ -888,6 +941,8 @@ void obtenerFechasCSV(String &primera, String &ultima) {
   f.close();
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // SETUP
 // =============================
@@ -939,6 +994,8 @@ void setup() {
   actualizarPatronLluvia();
 }
 
+//-------------------------------------------------------------------------------------------------
+
 // =============================
 // LOOP PRINCIPAL
 // =============================
@@ -982,7 +1039,7 @@ void loop() {
     actualizarClimaApi();
   }
 
-
+//-------------------------------------------------------------------------------------------------
   // =============================
   // SERVIDOR WEB
   // =============================
