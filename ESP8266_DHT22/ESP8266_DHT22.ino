@@ -28,8 +28,8 @@ const uint16_t BRILLO_LLUVIA = 15;
 // =============================
 // CONSTANTES PARA REGULAR TEMPERATURA Y HUMEDAD
 // =============================
-const float OFFSET_TEMP    = -0.7;  // en °C, ajustalo para igualar al otro sensor
-const float OFFSET_HUM     = -14.0;  // en %, ajustalo para igualar al otro sensor
+const float OFFSET_TEMP    = 0;  // en °C, ajustar para igualar al otro sensor
+const float OFFSET_HUM     = -12.8;  // en %, ajustar para igualar al otro sensor
 
 
 // =============================
