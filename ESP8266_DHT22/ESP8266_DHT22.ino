@@ -730,6 +730,7 @@ void actualizarClimaApi() {
     }
   }
 
+/*
   // code actual (por si se quiere filtrar por rango de lluvia)
   int code = -1;
   int idxCode = payload.indexOf("\"code\":");
@@ -744,13 +745,14 @@ void actualizarClimaApi() {
       Serial.printf("[API] code (actual) = %d\n", code);
     }
   }
+*/
 
   // Umbral de precipitación más estricto
-  const float UMBRAL_PRECIP_ACTUAL = 0.5f; // mm
+  const float UMBRAL_PRECIP_ACTUAL = 0.85f; // mm
   // Rango de códigos de lluvia según WeatherAPI: 1063-1207 aprox.
-  bool codeEsLluvia = (code >= 1063 && code <= 1207);
+  //bool codeEsLluvia = (code >= 1063 && code <= 1207);
 
-  if (precip > UMBRAL_PRECIP_ACTUAL && codeEsLluvia) {
+  if (precip > UMBRAL_PRECIP_ACTUAL) { //precip > UMBRAL_PRECIP_ACTUAL && codeEsLluvia
     hayLluvia = true;
   }
 
