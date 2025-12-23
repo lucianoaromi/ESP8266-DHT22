@@ -365,7 +365,7 @@ void agregarRegistroLog(const String &fechaHora, float t, float h) {
     return;
   }
 
-  f.printf("%s,%.1f,%.1f\r\n", fechaHora.c_str(), t, h);
+  f.printf("%s,%.1f,%.0f\r\n", fechaHora.c_str(), t, h);
   f.close();
 
   logLines++;
@@ -853,7 +853,7 @@ void actualizarClimaApi() {
 //-------------------------------------------------------------------------------------------------
 
   // --------- LED DE TEMPERATURA ----------
-  const float UMBRAL_LED = 38.0;  // umbral temp API
+  const float UMBRAL_LED = 35.0;  // umbral temp API
 
   if (!isnan(tempApi) && tempApi >= UMBRAL_LED) {
     digitalWrite(LED_API, HIGH);
@@ -1015,7 +1015,7 @@ void loop() {
       float tUso = isnan(tempFiltrada) ? TEMPERATURA : tempFiltrada;
       float hUso = isnan(humFiltrada)  ? HUMEDAD     : humFiltrada;
 
-      Serial.printf("Temp (filtrada): %.1f C | Hum (filtrada): %.1f %%\n", tUso, hUso);
+      Serial.printf("Temp (filtrada): %.1f C | Hum (filtrada): %.0f %%\n", tUso, hUso);
 
       actualizarHistorial(tUso, hUso);
 
@@ -1026,7 +1026,7 @@ void loop() {
 
         String alerta = "ALERTA: Temperatura alta!\n";
         alerta += "🌡 Temp: " + String(tUso) + " °C\n";
-        alerta += "💧 Hum: " + String(hUso) + " %\n";
+        alerta += "💧 Hum: " + String(hUso, 0) + " %\n";
         alerta += "🕒 " + obtenerFechaHora();
 
         enviarTelegram(alerta);
@@ -1083,15 +1083,15 @@ void loop() {
     client.print("{\"temp\":");
     client.print(tOut, 1);
     client.print(",\"hum\":");
-    client.print(hOut, 1);
+    client.print(hOut, 0);
     client.print(",\"tmin\":");
     client.print(tempMin, 1);
     client.print(",\"tmax\":");
     client.print(tempMax, 1);
     client.print(",\"hmin\":");
-    client.print(humMin, 1);
+    client.print(humMin, 0);
     client.print(",\"hmax\":");
-    client.print(humMax, 1);
+    client.print(humMax, 0);
     client.print(",\"time\":\"");
     client.print(fechaHora);
     client.print("\",\"hcount\":");
@@ -1123,7 +1123,7 @@ void loop() {
     for (int i = 0; i < histCount; i++) {
       int idx = (histIndex - histCount + i + HOUR_POINTS) % HOUR_POINTS;
       if (i > 0) client.print(",");
-      client.print(histHum[idx], 1);
+      client.print(histHum[idx], 0);
     }
     client.println("]}");
 
@@ -1925,7 +1925,7 @@ void loop() {
                             },
                             ticks: {
                                 callback: function (v) {
-                                    return v.toFixed(1);
+                                    return v.toFixed(0);
                                 }
                             }
                         }
@@ -2035,11 +2035,11 @@ void loop() {
                 .then(r => r.json())
                 .then(d => {
                     document.getElementById('temp').textContent = d.temp.toFixed(1);
-                    document.getElementById('hum').textContent = d.hum.toFixed(1);
+                    document.getElementById('hum').textContent = d.hum.toFixed(0);
                     document.getElementById('tmin').textContent = d.tmin.toFixed(1);
                     document.getElementById('tmax').textContent = d.tmax.toFixed(1);
-                    document.getElementById('hmin').textContent = d.hmin.toFixed(1);
-                    document.getElementById('hmax').textContent = d.hmax.toFixed(1);
+                    document.getElementById('hmin').textContent = d.hmin.toFixed(0);
+                    document.getElementById('hmax').textContent = d.hmax.toFixed(0);
                     document.getElementById('time').textContent = d.time;
 
                     document.getElementById('moonIcon').textContent = d.moonIcon;
