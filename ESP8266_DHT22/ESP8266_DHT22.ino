@@ -18,6 +18,7 @@
 #include <time.h>
 #include <FS.h>
 #include <math.h>
+#include "secrets.h"
 
 // =============================
 // Brillo del LED de lluvia (0 = apagado, 1023 = máximo)
@@ -52,8 +53,7 @@ const unsigned long RAIN_BURST_PERIOD    = 5UL * 60UL * 1000UL;// Cada 5 min se 
 // =============================
 // CONFIG WIFI
 // =============================
-const char* ssid     = "Yolanda Casa";
-const char* password = "Dr4Y0l4nd4G0nz4l3z";
+// Credenciales cargadas desde secrets.h (archivo local ignorado por Git)
 
 // =============================
 // CONFIG DHT22
@@ -138,15 +138,14 @@ bool          rainLedState    = false;
 unsigned long lastWeatherCheck = 0;
 const unsigned long WEATHER_INTERVAL = 10UL * 60UL * 1000UL; // cada 10 minutos
 
-const char* WEATHER_API_KEY = "9ff16c4a57b4424e947202117251907";
+// WEATHER_API_KEY se carga desde secrets.h
 const char* WEATHER_CITY    = "Corrientes,Argentina";
 
 
 // =============================
 // TELEGRAM CONFIG
 // =============================
-const String TELEGRAM_TOKEN = "8481385433:AAHYb6QwA5Kn_cd7P5IcNKx70Irge8xRHG0";
-const String CHAT_ID        = "5144677839";
+// TELEGRAM_TOKEN y CHAT_ID se cargan desde secrets.h
 
 const float ALERTA_TEMP = 35.0;              // UMBRAL DE ALERTA
 unsigned long lastAlert = 0;                 // tiempo del último aviso
